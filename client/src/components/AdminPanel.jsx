@@ -79,6 +79,7 @@ import ChoreHistoryTab from './ChoreHistoryTab';
 import TabIconModal from './TabIconModal';
 import GoogleAccountConnection from './GoogleAccountConnection';
 import HomeAssistantConnection from './HomeAssistantConnection';
+import SoundPicker from './SoundPicker';
 
 const USERS_UPDATED_EVENT = 'hearthboard:users-updated';
 const DEVICE_SETTINGS_UPDATED_EVENT = 'hearthboard:device-settings-updated';
@@ -239,7 +240,10 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
   const [widgetsSubTab, setWidgetsSubTab] = useState(0);
   const [settings, setSettings] = useState({
     WEATHER_API_KEY: '',
-    PROXY_WHITELIST: ''
+    PROXY_WHITELIST: '',
+    CHORE_SOUND_ENABLED: 'false',
+    CHORE_SOUND_DEFAULT: '',
+    CHORE_SOUND_VOLUME: '100'
   });
   const [widgetSettings, setLocalWidgetSettings] = useState({
     ...DEFAULT_WIDGET_SETTINGS
@@ -573,6 +577,25 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
         setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
       }
       throw error;
+    }
+  };
+
+  const saveChoreSoundSettings = async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([
+        axios.post(`${API_BASE_URL}/api/settings`, { key: 'CHORE_SOUND_ENABLED', value: settings.CHORE_SOUND_ENABLED || 'false' }),
+        axios.post(`${API_BASE_URL}/api/settings`, { key: 'CHORE_SOUND_DEFAULT', value: settings.CHORE_SOUND_DEFAULT || '' }),
+        axios.post(`${API_BASE_URL}/api/settings`, { key: 'CHORE_SOUND_VOLUME', value: String(settings.CHORE_SOUND_VOLUME ?? '100') }),
+      ]);
+      setSaveMessage({ show: true, type: 'success', text: 'Chore sound settings saved.' });
+      setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error saving chore sound settings:', error);
+      setSaveMessage({ show: true, type: 'error', text: 'Failed to save chore sound settings.' });
+      setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -2982,6 +3005,58 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                 {saveMessage.text}
               </Alert>
             )}
+
+            <Box sx={{ mb: 3, p: 2, border: '1px solid var(--card-border)', borderRadius: 1 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 600 }}>
+                Chore Due-Time Sounds
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={settings.CHORE_SOUND_ENABLED === 'true' || settings.CHORE_SOUND_ENABLED === true}
+                    onChange={(e) => setSettings(prev => ({ ...prev, CHORE_SOUND_ENABLED: e.target.checked ? 'true' : 'false' }))}
+                  />
+                }
+                label="Enable chore due-time sounds (household-wide master switch)"
+              />
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 3, alignItems: { sm: 'flex-start' }, mt: 1 }}>
+                <Box sx={{ flex: 1, minWidth: 240 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    Default sound (used when a chore doesn't pick its own)
+                  </Typography>
+                  <SoundPicker
+                    label="Default sound"
+                    value={settings.CHORE_SOUND_DEFAULT || ''}
+                    onChange={(sound) => setSettings(prev => ({ ...prev, CHORE_SOUND_DEFAULT: sound }))}
+                    volume={(Number(settings.CHORE_SOUND_VOLUME) || 100) / 100}
+                    includeNoneOption
+                    noneLabel="(none)"
+                    allowDelete
+                  />
+                </Box>
+                <Box sx={{ width: 200 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    Volume: {Number(settings.CHORE_SOUND_VOLUME) || 0}%
+                  </Typography>
+                  <Slider
+                    value={Number(settings.CHORE_SOUND_VOLUME) || 0}
+                    onChange={(_, v) => setSettings(prev => ({ ...prev, CHORE_SOUND_VOLUME: String(v) }))}
+                    min={0}
+                    max={100}
+                    valueLabelDisplay="auto"
+                  />
+                </Box>
+                <Button
+                  variant="contained"
+                  onClick={saveChoreSoundSettings}
+                  disabled={isLoading}
+                  startIcon={<Save />}
+                  sx={{ alignSelf: { xs: 'stretch', sm: 'center' } }}
+                >
+                  {isLoading ? 'Saving...' : 'Save'}
+                </Button>
+              </Box>
+            </Box>
 
             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
               <Tabs value={choresSubTab} onChange={(_, v) => setChoresSubTab(v)} size="small">
