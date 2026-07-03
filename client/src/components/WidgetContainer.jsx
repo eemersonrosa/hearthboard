@@ -413,6 +413,7 @@ const WidgetContainer = ({
       'calendar-widget': 'calendar',
       'photos-widget': 'photos',
       'weather-widget': 'weather',
+      'homeassistant-widget': 'homeassistant',
     };
 
     const settingsKey = widgetMap[widgetId];

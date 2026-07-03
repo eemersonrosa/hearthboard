@@ -67,6 +67,23 @@ const WeatherWidget = ({
   const [coordinates, setCoordinates] = useState(null);
   const [layoutMode, setLayoutMode] = useState('auto');
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [weatherSource, setWeatherSource] = useState('openweathermap');
+  const usingHomeAssistant = weatherSource === 'homeassistant';
+
+  useEffect(() => {
+    const loadWeatherSource = async () => {
+      try {
+        const response = await axios.post(`${API_BASE_URL}/api/settings/search`, ['WEATHER_SOURCE']);
+        if (response.data?.WEATHER_SOURCE === 'homeassistant') {
+          setWeatherSource('homeassistant');
+          setShouldFetchNow(true);
+        }
+      } catch {
+        // Default to OpenWeatherMap when the setting cannot be read.
+      }
+    };
+    void loadWeatherSource();
+  }, []);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [shouldFetchNow, setShouldFetchNow] = useState(false);
   const [draftLocationQuery, setDraftLocationQuery] = useState(DEFAULT_LOCATION_QUERY);
@@ -275,6 +292,13 @@ const WeatherWidget = ({
   };
 
   const fetchWeatherPayload = async (targetLocationQuery, targetTempUnit, targetCoordinates = null) => {
+    if (usingHomeAssistant) {
+      const response = await axios.get(`${API_BASE_URL}/api/homeassistant/weather`, {
+        params: { unit: targetTempUnit === 'F' ? 'F' : 'C' },
+      });
+      return response.data;
+    }
+
     const targetUnitParam = targetTempUnit === 'F' ? 'imperial' : 'metric';
 
     const resolvedCoordinates = isValidCoordinates(targetCoordinates)
@@ -412,7 +436,7 @@ const WeatherWidget = ({
   };
 
   const refreshCurrentWeather = async () => {
-    if (!weatherApiKey || !locationQuery) {
+    if (!usingHomeAssistant && (!weatherApiKey || !locationQuery)) {
       return;
     }
 
@@ -543,11 +567,11 @@ const WeatherWidget = ({
       return;
     }
 
-    if (locationQuery && weatherApiKey) {
+    if (usingHomeAssistant || (locationQuery && weatherApiKey)) {
       fetchWeatherData();
       setShouldFetchNow(false);
     }
-  }, [locationQuery, weatherApiKey, tempUnit, settingsLoaded, shouldFetchNow]);
+  }, [locationQuery, weatherApiKey, tempUnit, settingsLoaded, shouldFetchNow, usingHomeAssistant]);
 
   useEffect(() => {
     if (!settingsLoaded || !weatherApiKey) {
@@ -646,14 +670,16 @@ const WeatherWidget = ({
   );
 
   const fetchWeatherData = async () => {
-    if (!weatherApiKey) {
-      setError('Weather API key not configured. Please add your OpenWeatherMap API key in the Admin Panel.');
-      return;
-    }
+    if (!usingHomeAssistant) {
+      if (!weatherApiKey) {
+        setError('Weather API key not configured. Please add your OpenWeatherMap API key in the Admin Panel, or switch the weather source to Home Assistant.');
+        return;
+      }
 
-    if (!locationQuery) {
-      setError('Please enter a location.');
-      return;
+      if (!locationQuery) {
+        setError('Please enter a location.');
+        return;
+      }
     }
 
     setLoading(true);

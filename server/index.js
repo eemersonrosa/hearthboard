@@ -26,6 +26,7 @@ const widgetRegistryPath = path.join(__dirname, 'widgets_registry.json');
 // Calendar sync service
 const CalendarSyncService = require('./services/calendarSync');
 const googleConnection = require('./services/googleConnection');
+const homeAssistant = require('./services/homeAssistant');
 const googleCalendar = require('./services/googleCalendar');
 const appleCalDAV = require('./services/appleCalDAV');
 const googlePhotos = require('./services/googlePhotos');
@@ -1985,8 +1986,8 @@ function deserializeSettingValue(value) {
 fastify.get('/api/settings', async (request, reply) => {
   try {
     console.log('=== FETCHING SETTINGS ===');
-    const rows = db.prepare('SELECT key, value FROM settings').all();
-    console.log('Raw settings from database:', rows);
+    const rows = db.prepare('SELECT key, value FROM settings').all()
+      .filter((row) => !homeAssistant.SECRET_SETTING_KEYS.includes(row.key));
     // Convert array of {key, value} objects to a single object {key: value}
     const settings = rows.reduce((acc, row) => {
       acc[row.key] = deserializeSettingValue(row.value);
@@ -2013,8 +2014,8 @@ fastify.post('/api/settings/search', async (request, reply) => {
       const conditions = keys.map(() => 'key LIKE ?').join(' OR ');
       query += ' WHERE ' + conditions;
     }
-    const rows = db.prepare(query).all(...keys.map(key => key.replaceAll('*', '%')));
-    console.log('Raw settings from database:', rows);
+    const rows = db.prepare(query).all(...keys.map(key => key.replaceAll('*', '%')))
+      .filter((row) => !homeAssistant.SECRET_SETTING_KEYS.includes(row.key));
     // Convert array of {key, value} objects to a single object {key: value}
     const settings = rows.reduce((acc, row) => {
       acc[row.key] = deserializeSettingValue(row.value);
@@ -2710,6 +2711,111 @@ fastify.get('/api/proxy', async (request, reply) => {
       error: 'Failed to proxy request.',
       details: error.message
     });
+  }
+});
+
+// Home Assistant routes
+fastify.get('/api/homeassistant/status', async (request, reply) => {
+  try {
+    const status = homeAssistant.getStatus(db);
+    if (request.query.test === '1' && status.configured) {
+      status.connection = await homeAssistant.testConnection(db);
+    }
+    return status;
+  } catch (error) {
+    console.error('Error fetching Home Assistant status:', error);
+    reply.status(500).send({ error: 'Failed to fetch Home Assistant status' });
+  }
+});
+
+fastify.post('/api/homeassistant/config', async (request, reply) => {
+  try {
+    const { base_url, token, weather_entity } = request.body || {};
+    homeAssistant.saveConfig(db, {
+      baseUrl: base_url,
+      token,
+      weatherEntity: weather_entity,
+    });
+    return { success: true, status: homeAssistant.getStatus(db) };
+  } catch (error) {
+    console.error('Error saving Home Assistant config:', error);
+    reply.status(500).send({ error: error.message || 'Failed to save Home Assistant config' });
+  }
+});
+
+fastify.get('/api/homeassistant/entities', async (request, reply) => {
+  try {
+    const domains = request.query.domains
+      ? String(request.query.domains).split(',').map((domain) => domain.trim()).filter(Boolean)
+      : null;
+    return await homeAssistant.getEntities(db, domains);
+  } catch (error) {
+    const statusCode = error.statusCode || 502;
+    console.error('Error fetching Home Assistant entities:', error.message);
+    reply.status(statusCode).send({ error: error.message || 'Failed to fetch entities' });
+  }
+});
+
+fastify.post('/api/homeassistant/service', async (request, reply) => {
+  const { domain, service, entity_id, data } = request.body || {};
+  if (!domain || !service) {
+    return reply.status(400).send({ error: 'domain and service are required' });
+  }
+  // Guard against destructive/system domains from a wall panel.
+  const blockedDomains = new Set(['hassio', 'update', 'backup', 'recorder', 'system_log', 'shell_command']);
+  if (blockedDomains.has(domain)) {
+    return reply.status(400).send({ error: `Service domain '${domain}' is not allowed from the panel` });
+  }
+  try {
+    const result = await homeAssistant.callService(db, { domain, service, entityId: entity_id, data });
+    return { success: true, result };
+  } catch (error) {
+    const statusCode = error.statusCode || 502;
+    console.error('Error calling Home Assistant service:', error.message);
+    reply.status(statusCode).send({ error: error.message || 'Failed to call service' });
+  }
+});
+
+fastify.get('/api/homeassistant/weather', async (request, reply) => {
+  try {
+    const unit = request.query.unit === 'F' ? 'F' : 'C';
+    return await homeAssistant.getWeatherPayload(db, unit);
+  } catch (error) {
+    const statusCode = error.statusCode || 502;
+    console.error('Error fetching Home Assistant weather:', error.message);
+    reply.status(statusCode).send({ error: error.message || 'Failed to fetch weather from Home Assistant' });
+  }
+});
+
+fastify.get('/api/homeassistant/alert-rules', async (request, reply) => {
+  try {
+    return homeAssistant.getAlertRules(db);
+  } catch (error) {
+    console.error('Error fetching Home Assistant alert rules:', error);
+    reply.status(500).send({ error: 'Failed to fetch alert rules' });
+  }
+});
+
+fastify.put('/api/homeassistant/alert-rules', async (request, reply) => {
+  try {
+    return homeAssistant.saveAlertRules(db, request.body);
+  } catch (error) {
+    console.error('Error saving Home Assistant alert rules:', error);
+    reply.status(500).send({ error: 'Failed to save alert rules' });
+  }
+});
+
+fastify.get('/api/homeassistant/alerts', async (request, reply) => {
+  try {
+    if (!homeAssistant.isConfigured(db)) {
+      return { alerts: [], rules_count: 0, configured: false };
+    }
+    const result = await homeAssistant.evaluateAlerts(db);
+    return { ...result, configured: true };
+  } catch (error) {
+    const statusCode = error.statusCode || 502;
+    console.error('Error evaluating Home Assistant alerts:', error.message);
+    reply.status(statusCode).send({ error: error.message || 'Failed to evaluate alerts' });
   }
 });
 

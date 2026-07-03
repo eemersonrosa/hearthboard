@@ -8,6 +8,7 @@ import PluginWidgetWrapper from './components/PluginWidgetWrapper.jsx';
 import WidgetContainer from './components/WidgetContainer.jsx';
 import TabBar from './components/TabBar.jsx';
 import ScreensaverCountdown from './components/ScreensaverCountdown.jsx';
+import HAAlertsBar from './components/HAAlertsBar.jsx';
 import { API_BASE_URL } from './utils/apiConfig.js';
 import { getDeviceApiBase } from './utils/deviceName.js';
 import './index.css';
@@ -17,6 +18,7 @@ const loadCalendarWidget = () => import('./components/CalendarWidget.jsx');
 const loadPhotoWidget = () => import('./components/PhotoWidget.jsx');
 const loadWeatherWidget = () => import('./components/WeatherWidget.jsx');
 const loadChoreWidget = () => import('./components/ChoreWidget.jsx');
+const loadHomeAssistantWidget = () => import('./components/HomeAssistantWidget.jsx');
 const loadTabIconModal = () => import('./components/TabIconModal.jsx');
 const loadScreenSaver = () => import('./components/ScreenSaver.jsx');
 
@@ -60,6 +62,7 @@ const CalendarWidget = lazy(loadCalendarWidget);
 const PhotoWidget = lazy(loadPhotoWidget);
 const WeatherWidget = lazy(loadWeatherWidget);
 const ChoreWidget = lazy(loadChoreWidget);
+const HomeAssistantWidget = lazy(loadHomeAssistantWidget);
 const TabIconModal = lazy(loadTabIconModal);
 const ScreenSaver = lazy(loadScreenSaver);
 
@@ -110,6 +113,7 @@ const DEFAULT_WIDGET_SETTINGS = {
   calendar: { enabled: false, transparent: false },
   photos: { enabled: false, transparent: false },
   weather: { enabled: false, transparent: false },
+  homeassistant: { enabled: false, transparent: false },
   lightGradientStart: '#00ddeb',
   lightGradientEnd: '#ff6b6b',
   darkGradientStart: '#2e2767',
@@ -127,6 +131,7 @@ const normalizeWidgetSettings = (raw) => ({
   calendar: { ...DEFAULT_WIDGET_SETTINGS.calendar, ...(raw?.calendar || {}) },
   photos: { ...DEFAULT_WIDGET_SETTINGS.photos, ...(raw?.photos || {}) },
   weather: { ...DEFAULT_WIDGET_SETTINGS.weather, ...(raw?.weather || {}) },
+  homeassistant: { ...DEFAULT_WIDGET_SETTINGS.homeassistant, ...(raw?.homeassistant || {}) },
 });
 
 const normalizeScreensaverSettings = (raw) => ({
@@ -889,6 +894,26 @@ const App = () => {
       });
     }
 
+    if (widgetSettings.homeassistant.enabled && isWidgetAssignedToTab('homeassistant', activeTab)) {
+      const dbLayout = getWidgetLayoutForTab('homeassistant', activeTab);
+      result.push({
+        id: 'homeassistant-widget',
+        defaultPosition: { x: 8, y: 3 },
+        defaultSize: { width: 4, height: 5 },
+        minWidth: 2,
+        minHeight: 2,
+        savedLayout: dbLayout,
+        content: (
+          <Suspense fallback={<WidgetLoadingFallback label="Home Assistant" />}>
+            <HomeAssistantWidget
+              transparentBackground={widgetSettings.homeassistant.transparent}
+              refreshInterval={widgetSettings.homeassistant.refreshInterval || 0}
+            />
+          </Suspense>
+        ),
+      });
+    }
+
     installedPlugins.forEach((plugin, index) => {
       const pSettings = pluginSettings[plugin.filename] || {};
       if (!pSettings.enabled) return;
@@ -928,6 +953,7 @@ const App = () => {
 
   return (
     <>
+      <HAAlertsBar />
       <Box sx={{ width: '100%', minHeight: '100vh', position: 'relative', pb: { xs: '80px', sm: 0 }, pr: { xs: 0, sm: '76px' } }}>
         {widgets.length > 0 && (
           <WidgetContainer

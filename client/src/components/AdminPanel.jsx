@@ -73,6 +73,7 @@ import ChoreSchedulesTab from './ChoreSchedulesTab';
 import ChoreHistoryTab from './ChoreHistoryTab';
 import TabIconModal from './TabIconModal';
 import GoogleAccountConnection from './GoogleAccountConnection';
+import HomeAssistantConnection from './HomeAssistantConnection';
 
 const USERS_UPDATED_EVENT = 'hearthboard:users-updated';
 const DEVICE_SETTINGS_UPDATED_EVENT = 'hearthboard:device-settings-updated';
@@ -109,6 +110,7 @@ const DEFAULT_WIDGET_SETTINGS = {
   calendar: { enabled: false, transparent: false, refreshInterval: 0 },
   photos: { enabled: false, transparent: false, refreshInterval: 0 },
   weather: { enabled: false, transparent: false, refreshInterval: 0 },
+  homeassistant: { enabled: false, transparent: false, refreshInterval: 0 },
 };
 
 const DEFAULT_INTERFACE_COLORS = {
@@ -130,6 +132,7 @@ const normalizeWidgetSettings = (raw) => ({
   calendar: { ...DEFAULT_WIDGET_SETTINGS.calendar, ...(raw?.calendar || {}) },
   photos: { ...DEFAULT_WIDGET_SETTINGS.photos, ...(raw?.photos || {}) },
   weather: { ...DEFAULT_WIDGET_SETTINGS.weather, ...(raw?.weather || {}) },
+  homeassistant: { ...DEFAULT_WIDGET_SETTINGS.homeassistant, ...(raw?.homeassistant || {}) },
 });
 
 const normalizeScreensaverSettings = (raw) => ({
@@ -1770,14 +1773,14 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                 </Alert>
 
                 {Object.entries(widgetSettings).filter(([key]) =>
-                  ['chores', 'calendar', 'photos'].includes(key)
+                  ['chores', 'calendar', 'photos', 'homeassistant'].includes(key)
                 ).map(([widget, config]) => {
                   const hasRequiredTabsError = Boolean(config.enabled) && (!Array.isArray(widgetAssignments[widget]) || widgetAssignments[widget].length === 0);
 
                   return (
                   <Box key={widget} sx={{ mb: 3, p: 2, border: '1px solid var(--card-border)', borderRadius: 1 }}>
                     <Typography variant="subtitle1" sx={{ mb: 2, textTransform: 'capitalize', fontWeight: 'bold' }}>
-                      {widget} Widget
+                      {widget === 'homeassistant' ? 'Home Assistant' : widget} Widget
                     </Typography>
 
                     <Grid container spacing={2} sx={{ alignItems: 'center' }}>
@@ -1866,6 +1869,25 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                   <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
                     Weather Widget
                   </Typography>
+
+                  <FormControl size="small" sx={{ mb: 2, minWidth: 260 }}>
+                    <InputLabel id="weather-source-label">Weather Source</InputLabel>
+                    <Select
+                      labelId="weather-source-label"
+                      label="Weather Source"
+                      value={settings.WEATHER_SOURCE === 'homeassistant' ? 'homeassistant' : 'openweathermap'}
+                      onChange={async (e) => {
+                        const nextSource = e.target.value;
+                        setSettings(prev => ({ ...prev, WEATHER_SOURCE: nextSource }));
+                        await saveSetting('WEATHER_SOURCE', nextSource, false);
+                        setSaveMessage({ show: true, type: 'success', text: `Weather source set to ${nextSource === 'homeassistant' ? 'Home Assistant' : 'OpenWeatherMap'}.` });
+                        setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
+                      }}
+                    >
+                      <MenuItem value="openweathermap">OpenWeatherMap (API key required)</MenuItem>
+                      <MenuItem value="homeassistant">Home Assistant (uses your HA weather entity)</MenuItem>
+                    </Select>
+                  </FormControl>
 
                   <Grid container spacing={2} sx={{ alignItems: 'center' }}>
                     <Grid size={{ xs: 12, sm: 6 }}>
@@ -3066,6 +3088,15 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
               <Divider sx={{ my: 2 }} />
 
               <GoogleAccountConnection
+                onMessage={({ type, text }) => {
+                  setSaveMessage({ show: true, type, text });
+                  setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
+                }}
+              />
+
+              <Divider sx={{ my: 3 }} />
+
+              <HomeAssistantConnection
                 onMessage={({ type, text }) => {
                   setSaveMessage({ show: true, type, text });
                   setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);

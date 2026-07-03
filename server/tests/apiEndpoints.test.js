@@ -473,3 +473,66 @@ test('user endpoints support name-only create, list, and update', async () => {
     assert.equal(updateRes.status, 200);
     assert.equal(updateRes.body.success, true);
 });
+
+test('home assistant endpoints: status, config, and alert rules contract', async () => {
+    const statusRes = await api('/api/homeassistant/status');
+    assert.equal(statusRes.status, 200);
+    assert.equal(typeof statusRes.body.configured, 'boolean');
+    assert.equal(typeof statusRes.body.base_url, 'string');
+    assert.equal(typeof statusRes.body.has_token, 'boolean');
+
+    const configRes = await api('/api/homeassistant/config', {
+        method: 'POST',
+        body: JSON.stringify({ base_url: 'http://ha.test:8123', token: 'test-token' }),
+    });
+    assert.equal(configRes.status, 200);
+    assert.equal(configRes.body.success, true);
+    assert.equal(configRes.body.status.configured, true);
+    assert.equal(configRes.body.status.base_url, 'http://ha.test:8123');
+
+    // The token must never leak through the generic settings API.
+    const settingsRes = await api('/api/settings');
+    assert.equal(settingsRes.status, 200);
+    assert.ok(!('HA_TOKEN_ENC' in settingsRes.body));
+    assert.ok(!('HA_TOKEN_PLAIN' in settingsRes.body));
+
+    const searchRes = await api('/api/settings/search', {
+        method: 'POST',
+        body: JSON.stringify(['HA_*']),
+    });
+    assert.equal(searchRes.status, 200);
+    assert.ok(!('HA_TOKEN_ENC' in searchRes.body));
+    assert.ok(!('HA_TOKEN_PLAIN' in searchRes.body));
+
+    // Alert rules round-trip and normalize.
+    const putRulesRes = await api('/api/homeassistant/alert-rules', {
+        method: 'PUT',
+        body: JSON.stringify([
+            { name: 'Front door', entity_id: 'binary_sensor.front_door', condition: 'state_equals', value: 'on' },
+            { entity_id: 'light.garage', condition: 'state_for_minutes', value: 'on', duration_minutes: 120 },
+            { name: 'invalid: no entity', condition: 'state_equals' },
+        ]),
+    });
+    assert.equal(putRulesRes.status, 200);
+    assert.equal(putRulesRes.body.length, 2);
+    assert.equal(putRulesRes.body[0].entity_id, 'binary_sensor.front_door');
+    assert.equal(putRulesRes.body[1].condition, 'state_for_minutes');
+    assert.equal(putRulesRes.body[1].duration_minutes, 120);
+
+    const getRulesRes = await api('/api/homeassistant/alert-rules');
+    assert.equal(getRulesRes.status, 200);
+    assert.equal(getRulesRes.body.length, 2);
+
+    // Service calls validate inputs and refuse system domains.
+    const missingServiceRes = await api('/api/homeassistant/service', {
+        method: 'POST',
+        body: JSON.stringify({ domain: 'light' }),
+    });
+    assert.equal(missingServiceRes.status, 400);
+
+    const blockedDomainRes = await api('/api/homeassistant/service', {
+        method: 'POST',
+        body: JSON.stringify({ domain: 'shell_command', service: 'run' }),
+    });
+    assert.equal(blockedDomainRes.status, 400);
+});
