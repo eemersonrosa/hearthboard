@@ -68,7 +68,7 @@ const PhotoWidget = ({ transparentBackground, refreshInterval = 0 }) => {
   };
 
   // Auto-refresh: timestamp-scheduled, paused while the screen is off.
-  useScheduledRefresh(refreshInterval, fetchPhotos);
+  useScheduledRefresh(refreshInterval, () => { void fetchPhotos(); });
 
   // Slideshow timer, also paused while the screen is off.
   useScheduledRefresh(
@@ -80,7 +80,7 @@ const PhotoWidget = ({ transparentBackground, refreshInterval = 0 }) => {
   const fetchPhotoSources = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/photo-sources`);
-      setPhotoSources(response.data);
+      setPhotoSources(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching photo sources:', error);
     }

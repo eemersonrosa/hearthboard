@@ -95,7 +95,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
     void loadDeviceWidgetSettings();
   }, [API_DEVICE_URL]);
 
-  useScheduledRefresh(refreshInterval, fetchData);
+  useScheduledRefresh(refreshInterval, () => { void fetchData(); });
 
   useEffect(() => {
     if (!deviceSettingsLoaded) {

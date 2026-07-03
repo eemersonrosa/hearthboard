@@ -345,7 +345,7 @@ const CalendarWidget = ({
   const fetchCalendarSources = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/calendar-sources`);
-      setCalendarSources(response.data);
+      setCalendarSources(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching calendar sources:', error);
     }
