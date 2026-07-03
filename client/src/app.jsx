@@ -1,6 +1,6 @@
 // client/src/app.jsx
 import React, { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
-import { IconButton, Box, Dialog, DialogContent, Typography } from '@mui/material';
+import { IconButton, Box, Dialog, DialogContent, Typography, useMediaQuery } from '@mui/material';
 import { Close } from '@mui/icons-material';
 
 import axios from 'axios';
@@ -243,6 +243,8 @@ const WidgetLoadingFallback = ({ label }) => (
 
 const App = () => {
   const API_DEVICE_URL = getDeviceApiBase(API_BASE_URL);
+  // Phones get a stacked single-column layout instead of the drag/resize grid.
+  const isMobile = useMediaQuery('(max-width: 700px)');
   const [theme, setTheme] = useState(readLocalTheme);
   const [themeMode, setThemeMode] = useState(() => readLocalThemeMode(readLocalTheme()));
   const [autoDarkModeSettings, setAutoDarkModeSettings] = useState(readLocalAutoDarkModeSettings);
@@ -824,6 +826,7 @@ const App = () => {
               refreshInterval={widgetSettings.calendar.refreshInterval || 0}
               activeTab={activeTab}
               activeTabConfigJson={tabs.find((tab) => tab.number === activeTab)?.config_json || null}
+              compact={isMobile}
             />
           </Suspense>
         ),
@@ -941,6 +944,101 @@ const App = () => {
     return result;
   }, [widgetSettings, pluginSettings, activeTab, apiKeys, widgetAssignments, installedPlugins, theme]);
 
+  // Mobile: full-width stacked cards in a fixed priority order — chores first
+  // for quick access, calendar next, no photos, plugins at screen width.
+  const mobileWidgets = useMemo(() => {
+    if (!isMobile) return [];
+
+    const stack = [];
+
+    if (widgetSettings.chores.enabled) {
+      stack.push({
+        id: 'chores-widget',
+        height: 420,
+        content: (
+          <Suspense fallback={<WidgetLoadingFallback label="chores" />}>
+            <ChoreWidget
+              transparentBackground={widgetSettings.chores.transparent}
+              refreshInterval={widgetSettings.chores.refreshInterval || 0}
+            />
+          </Suspense>
+        ),
+      });
+    }
+
+    if (widgetSettings.calendar.enabled) {
+      stack.push({
+        id: 'calendar-widget',
+        height: 440,
+        content: (
+          <Suspense fallback={<WidgetLoadingFallback label="calendar" />}>
+            <CalendarWidget
+              transparentBackground={widgetSettings.calendar.transparent}
+              icsCalendarUrl={apiKeys.ICS_CALENDAR_URL}
+              refreshInterval={widgetSettings.calendar.refreshInterval || 0}
+              activeTab={activeTab}
+              activeTabConfigJson={tabs.find((tab) => tab.number === activeTab)?.config_json || null}
+              compact
+            />
+          </Suspense>
+        ),
+      });
+    }
+
+    if (widgetSettings.weather.enabled) {
+      stack.push({
+        id: 'weather-widget',
+        height: 280,
+        content: (
+          <Suspense fallback={<WidgetLoadingFallback label="weather" />}>
+            <WeatherWidget
+              transparentBackground={widgetSettings.weather.transparent}
+              weatherApiKey={apiKeys.WEATHER_API_KEY}
+              refreshInterval={widgetSettings.weather.refreshInterval || 0}
+              activeTab={activeTab}
+              activeTabConfigJson={tabs.find((tab) => tab.number === activeTab)?.config_json || null}
+              allTabConfigs={tabs}
+            />
+          </Suspense>
+        ),
+      });
+    }
+
+    if (widgetSettings.homeassistant.enabled) {
+      stack.push({
+        id: 'homeassistant-widget',
+        height: 420,
+        content: (
+          <Suspense fallback={<WidgetLoadingFallback label="Home Assistant" />}>
+            <HomeAssistantWidget
+              transparentBackground={widgetSettings.homeassistant.transparent}
+              refreshInterval={widgetSettings.homeassistant.refreshInterval || 0}
+            />
+          </Suspense>
+        ),
+      });
+    }
+
+    installedPlugins.forEach((plugin) => {
+      const pSettings = pluginSettings[plugin.filename] || {};
+      if (!pSettings.enabled) return;
+      stack.push({
+        id: `plugin-${plugin.filename}`,
+        height: 380,
+        content: (
+          <PluginWidgetWrapper
+            filename={plugin.filename}
+            name={plugin.name}
+            theme={theme}
+            transparentBackground={pSettings.transparent || false}
+          />
+        ),
+      });
+    });
+
+    return stack;
+  }, [isMobile, widgetSettings, pluginSettings, installedPlugins, apiKeys, activeTab, tabs, theme]);
+
   const activeTabId = useMemo(() => {
     const active = tabs.find(tab => tab.number === activeTab);
     return active?.id ?? 1;
@@ -955,7 +1053,25 @@ const App = () => {
     <>
       <HAAlertsBar />
       <Box sx={{ width: '100%', minHeight: '100vh', position: 'relative', pb: { xs: '80px', sm: 0 }, pr: { xs: 0, sm: '76px' } }}>
-        {widgets.length > 0 && (
+        {isMobile ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 1.5 }}>
+            {mobileWidgets.map((widget) => (
+              <Box
+                key={widget.id}
+                sx={{
+                  width: '100%',
+                  height: widget.height,
+                  borderRadius: 2,
+                  border: '1px solid var(--card-border)',
+                  backgroundColor: 'var(--card-bg)',
+                  overflow: 'hidden',
+                }}
+              >
+                {widget.content}
+              </Box>
+            ))}
+          </Box>
+        ) : widgets.length > 0 && (
           <WidgetContainer
             widgets={widgets}
             locked={widgetsLocked}

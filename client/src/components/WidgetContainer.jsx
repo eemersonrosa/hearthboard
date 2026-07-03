@@ -13,6 +13,7 @@ const CORE_WIDGET_ID_TO_NAME = {
   'chores-widget': 'chores',
   'photos-widget': 'photos',
   'weather-widget': 'weather',
+  'homeassistant-widget': 'homeassistant',
 };
 
 const resolveWidgetName = (widgetId) => {

@@ -128,6 +128,7 @@ const CalendarWidget = ({
   refreshInterval = 0,
   activeTab = 1,
   activeTabConfigJson = null,
+  compact = false,
 }) => {
   const API_DEVICE_URL = getDeviceApiBase(API_BASE_URL);
   const [events, setEvents] = useState([]);
@@ -1089,6 +1090,78 @@ const CalendarWidget = ({
       }}>
         <CircularProgress />
         <Typography>Loading calendar events...</Typography>
+      </Box>
+    );
+  }
+
+  if (compact) {
+    const now = new Date();
+    const horizon = new Date();
+    horizon.setDate(now.getDate() + 7);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const agendaEvents = events
+      .filter((event) => event.end >= startOfToday && event.start <= horizon)
+      .sort((a, b) => a.start - b.start)
+      .slice(0, 25);
+
+    const eventsByDay = agendaEvents.reduce((acc, event) => {
+      const dayKey = moment(event.start).format('YYYY-MM-DD');
+      (acc[dayKey] = acc[dayKey] || []).push(event);
+      return acc;
+    }, {});
+
+    return (
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', p: 2 }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>📅 Next 7 days</Typography>
+        {error && (
+          <Typography color="error" variant="body2" sx={{ mb: 1 }}>{error}</Typography>
+        )}
+        <Box sx={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {agendaEvents.length === 0 ? (
+            <Typography variant="body2" sx={{ color: 'var(--text-secondary)', textAlign: 'center', py: 2 }}>
+              Nothing scheduled this week.
+            </Typography>
+          ) : (
+            Object.entries(eventsByDay).map(([dayKey, dayEvents]) => (
+              <Box key={dayKey} sx={{ mb: 1.5 }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                  {moment(dayKey).calendar(null, {
+                    sameDay: '[Today]',
+                    nextDay: '[Tomorrow]',
+                    nextWeek: 'dddd, MMM D',
+                    sameElse: 'dddd, MMM D',
+                  })}
+                </Typography>
+                {dayEvents.map((event, index) => (
+                  <Box
+                    key={`${dayKey}-${index}`}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      py: 0.75,
+                      px: 1,
+                      mt: 0.5,
+                      borderRadius: 1.5,
+                      border: '1px solid var(--card-border)',
+                      borderLeft: `4px solid ${event.source_color || 'var(--accent)'}`,
+                    }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {event.title}
+                      </Typography>
+                    </Box>
+                    <Typography variant="caption" sx={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                      {event.all_day ? 'All day' : moment(event.start).format('h:mm A')}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            ))
+          )}
+        </Box>
       </Box>
     );
   }
