@@ -12,8 +12,7 @@ import {
   Paper,
   IconButton,
   CircularProgress,
-  Alert,
-  Chip
+  Alert
 } from '@mui/material';
 import { Delete, Refresh } from '@mui/icons-material';
 import axios from 'axios';
@@ -60,7 +59,7 @@ export default function ChoreHistoryTab() {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-        <Typography variant="h6">Recent Clam History</Typography>
+        <Typography variant="h6">Recent Chore History</Typography>
         <Button
           variant="outlined"
           size="small"
@@ -73,7 +72,7 @@ export default function ChoreHistoryTab() {
       </Box>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Showing clam-earning history entries from the last 7 days.
+        Showing chore completions from the last 7 days.
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -85,7 +84,7 @@ export default function ChoreHistoryTab() {
         </Box>
       ) : history.length === 0 ? (
         <Box sx={{ py: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">No clam-earning history in the last 7 days.</Typography>
+          <Typography color="text.secondary">No chore completions in the last 7 days.</Typography>
         </Box>
       ) : (
         <TableContainer component={Paper} variant="outlined">
@@ -95,7 +94,6 @@ export default function ChoreHistoryTab() {
                 <TableCell sx={{ fontWeight: 600 }}>User</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Title</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Clams</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 600 }}>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -114,15 +112,6 @@ export default function ChoreHistoryTab() {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">{formatDate(entry.date)}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={`${entry.clam_value} 🥟`}
-                      size="small"
-                      color="primary"
-                      variant="filled"
-                      sx={{ fontWeight: 600 }}
-                    />
                   </TableCell>
                   <TableCell align="right">
                     <IconButton

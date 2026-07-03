@@ -35,7 +35,6 @@ let calendarSyncService = null;
 
 const initializeDatabase = require('./migrations/initializeDatabase');
 const migrateChoresDatabase = require('./migrations/migrateChoresDatabase');
-const migrateClamsToHistory = require('./migrations/migrateClamsToHistory');
 const migrateChoreHistoryTitle = require('./migrations/migrateChoreHistoryTitle');
 const migrateToDurationField = require('./migrations/migrateToDurationField');
 
@@ -761,8 +760,7 @@ function doesTableExist(tableName) {
 
 async function runLegacyMigrations() {
   await initializeDatabase(db);
-  await migrateChoresDatabase(db, getTodayLocalDateString);
-  await migrateClamsToHistory(db, getTodayLocalDateString);
+  await migrateChoresDatabase(db);
   await migrateChoreHistoryTitle(db);
   await migrateToDurationField(db);
 }
@@ -870,7 +868,7 @@ async function dailyBackgroundProcessing() {
       WHERE cs.crontab IS NULL
         AND cs.visible = 1
         AND cs.user_id IS NOT NULL
-        AND c.clam_value > 0;
+        AND c.is_bonus = 1;
     `).all();
     console.log(`Found ${choresToReset.length} bonus chores to reset`);
     let resetScheduleCount = 0;
@@ -1333,10 +1331,10 @@ fastify.get('/api/chores', async (request, reply) => {
 });
 
 fastify.post('/api/chores', async (request, reply) => {
-  const { title, description, clam_value } = request.body;
+  const { title, description, is_bonus } = request.body;
   try {
-    const stmt = db.prepare('INSERT INTO chores (title, description, clam_value) VALUES (?, ?, ?)');
-    const info = stmt.run(title, description, clam_value || 0);
+    const stmt = db.prepare('INSERT INTO chores (title, description, is_bonus) VALUES (?, ?, ?)');
+    const info = stmt.run(title, description, is_bonus ? 1 : 0);
     return { id: info.lastInsertRowid, success: true };
   } catch (error) {
     console.error('Error adding chore:', error);
@@ -1346,10 +1344,10 @@ fastify.post('/api/chores', async (request, reply) => {
 
 fastify.patch('/api/chores/:id', async (request, reply) => {
   const { id } = request.params;
-  const { title, description, clam_value } = request.body;
+  const { title, description, is_bonus } = request.body;
   try {
-    const stmt = db.prepare('UPDATE chores SET title = ?, description = ?, clam_value = ? WHERE id = ?');
-    const info = stmt.run(title, description, clam_value, id);
+    const stmt = db.prepare('UPDATE chores SET title = ?, description = ?, is_bonus = ? WHERE id = ?');
+    const info = stmt.run(title, description, is_bonus ? 1 : 0, id);
     if (info.changes === 0) {
       return reply.status(404).send({ error: 'Chore not found' });
     }
@@ -1380,7 +1378,7 @@ fastify.delete('/api/chores/:id', async (request, reply) => {
 fastify.get('/api/chore-schedules', async (request, reply) => {
   try {
     const { user_id, visible, usage, chore_id } = request.query;
-    let query = 'SELECT cs.*, c.title, c.description, c.clam_value FROM chore_schedules cs JOIN chores c ON cs.chore_id = c.id';
+    let query = 'SELECT cs.*, c.title, c.description, c.is_bonus FROM chore_schedules cs JOIN chores c ON cs.chore_id = c.id';
     const conditions = [];
     const params = [];
 
@@ -1418,7 +1416,7 @@ fastify.get('/api/chore-schedules', async (request, reply) => {
 fastify.get('/api/chore-schedules/:id', async (request, reply) => {
   const { id } = request.params;
   try {
-    const row = db.prepare('SELECT cs.*, c.title, c.description, c.clam_value FROM chore_schedules cs JOIN chores c ON cs.chore_id = c.id WHERE cs.id = ?').get(id);
+    const row = db.prepare('SELECT cs.*, c.title, c.description, c.is_bonus FROM chore_schedules cs JOIN chores c ON cs.chore_id = c.id WHERE cs.id = ?').get(id);
     if (!row) {
       return reply.status(404).send({ error: 'Schedule not found' });
     }
@@ -1600,24 +1598,6 @@ fastify.patch('/api/chore-schedules/:id', async (request, reply) => {
       return reply.status(404).send({ error: 'Schedule not found' });
     }
 
-    // When a chore is reassigned to a different person, re-check the daily "all
-    // regular chores done" bonus for both the previous and new owner. Losing a
-    // chore can make someone newly all-done, so this awards the bonus they've
-    // earned. It never removes points, so no one loses their score on a move.
-    if (user_id !== undefined) {
-      const previousUserId = existingSchedule.user_id;
-      const nextUserId = user_id || null;
-      if (previousUserId !== nextUserId) {
-        const today = getTodayLocalDateString();
-        if (previousUserId) {
-          awardDailyRegularBonusIfDue(previousUserId, today);
-        }
-        if (nextUserId) {
-          awardDailyRegularBonusIfDue(nextUserId, today);
-        }
-      }
-    }
-
     return { success: true };
   } catch (error) {
     console.error('Error updating schedule:', error);
@@ -1690,26 +1670,15 @@ fastify.get('/api/chore-history/user/:userId', async (request, reply) => {
   }
 });
 
-fastify.get('/api/chore-history/summary/:userId', async (request, reply) => {
-  const { userId } = request.params;
-  try {
-    const result = db.prepare('SELECT COALESCE(SUM(clam_value), 0) as total FROM chore_history WHERE user_id = ?').get(userId);
-    return { user_id: parseInt(userId), clam_total: result.total };
-  } catch (error) {
-    console.error('Error getting clam summary:', error);
-    reply.status(500).send({ error: 'Failed to get clam summary' });
-  }
-});
-
 fastify.post('/api/chore-history', async (request, reply) => {
-  const { user_id, chore_schedule_id, date, clam_value } = request.body;
+  const { user_id, chore_schedule_id, date } = request.body;
   try {
     if (!user_id || !date) {
       return reply.status(400).send({ error: 'user_id and date are required' });
     }
 
-    const stmt = db.prepare('INSERT INTO chore_history (user_id, chore_schedule_id, date, clam_value) VALUES (?, ?, ?, ?)');
-    const info = stmt.run(user_id, chore_schedule_id || null, date, clam_value || 0);
+    const stmt = db.prepare('INSERT INTO chore_history (user_id, chore_schedule_id, date) VALUES (?, ?, ?)');
+    const info = stmt.run(user_id, chore_schedule_id || null, date);
     return { id: info.lastInsertRowid, success: true };
   } catch (error) {
     console.error('Error adding history entry:', error);
@@ -1724,11 +1693,11 @@ fastify.get('/api/chore-history/recent', async (request, reply) => {
     since.setDate(since.getDate() - days);
     const sinceStr = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}`;
     const rows = db.prepare(`
-      SELECT ch.id, ch.date, ch.clam_value, ch.title, ch.created_at,
+      SELECT ch.id, ch.date, ch.title, ch.created_at,
              u.username
       FROM chore_history ch
       LEFT JOIN users u ON ch.user_id = u.id
-      WHERE ch.date >= ? AND ch.clam_value != 0
+      WHERE ch.date >= ?
       ORDER BY ch.date DESC, ch.created_at DESC
     `).all(sinceStr);
     return rows;
@@ -1753,84 +1722,6 @@ fastify.delete('/api/chore-history/:id', async (request, reply) => {
   }
 });
 
-// Returns the list of a user's regular (non-bonus) chore schedules that are due today.
-function getTodaysRegularChoresForUser(userId, today) {
-  const allUserSchedules = db.prepare(`
-    SELECT cs.*,
-     c.clam_value,
-     EXISTS (
-         SELECT 1
-         FROM chore_history ch
-         WHERE ch.chore_schedule_id = cs.id
-           AND ch.user_id = cs.user_id
-           AND ch.date = ?
-     ) AS completed_today
-    FROM chore_schedules cs
-    JOIN chores c
-      ON cs.chore_id = c.id
-    WHERE cs.user_id = ?
-      AND cs.visible = 1
-      AND NOT (
-        cs.crontab IS NOT NULL
-        AND cs.duration IN ('until-completed', 'once-completed')
-      )
-  `).all(today, userId);
-
-  const regularChores = allUserSchedules.filter(s => s.clam_value === 0);
-
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const justBeforeToday = new Date(startOfToday.getTime() - 1);
-  const options = { currentDate: justBeforeToday, utc: false };
-
-  const todaysChores = [];
-  for (const schedule of regularChores) {
-    // schedules without crontab are one-time and always part of today's chores
-    if (!schedule.crontab) {
-      todaysChores.push(schedule);
-      continue;
-    }
-
-    // ensure only chores that are due today are part of today's chores
-    const interval = CronExpressionParser.parse(schedule.crontab, options);
-    const next = interval.next().toISOString().split('T')[0];
-    if (today === next) {
-      todaysChores.push(schedule);
-    }
-  }
-
-  return todaysChores;
-}
-
-// Awards the daily "all regular chores completed" bonus to a user if every regular
-// chore due today is completed and the bonus hasn't already been recorded.
-// Never removes points; safe to call any time a user's chore set changes (e.g. reassignment).
-function awardDailyRegularBonusIfDue(userId, date) {
-  const today = getTodayLocalDateString();
-  const todaysChores = getTodaysRegularChoresForUser(userId, today);
-  const uncompletedRegularChores = todaysChores.filter(cs => cs.completed_today == 0);
-
-  if (!todaysChores.length || uncompletedRegularChores.length) {
-    return;
-  }
-
-  const dailyRewardSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('daily_completion_clam_reward');
-  const dailyReward = dailyRewardSetting ? parseInt(dailyRewardSetting.value, 10) : 2;
-
-  const bonusAlreadyAwarded = db.prepare(`
-      SELECT id FROM chore_history
-      WHERE user_id = ?
-      AND date = ?
-      AND chore_schedule_id IS NULL
-      AND clam_value = ?
-      AND title = ?
-    `).get(userId, date, dailyReward, 'Regular chores');
-
-  if (!bonusAlreadyAwarded) {
-    db.prepare('INSERT INTO chore_history (user_id, chore_schedule_id, date, clam_value, title) VALUES (?, NULL, ?, ?, ?)').run(userId, date, dailyReward, 'Regular chores');
-  }
-}
-
 // Chore completion endpoints
 fastify.post('/api/chores/complete', async (request, reply) => {
   const { chore_schedule_id, user_id, date } = request.body;
@@ -1839,7 +1730,7 @@ fastify.post('/api/chores/complete', async (request, reply) => {
       return reply.status(400).send({ error: 'chore_schedule_id, user_id, and date are required' });
     }
 
-    const schedule = db.prepare('SELECT cs.*, c.clam_value, c.title FROM chore_schedules cs JOIN chores c ON cs.chore_id = c.id WHERE cs.id = ?').get(chore_schedule_id);
+    const schedule = db.prepare('SELECT cs.*, c.title FROM chore_schedules cs JOIN chores c ON cs.chore_id = c.id WHERE cs.id = ?').get(chore_schedule_id);
     if (!schedule) {
       return reply.status(404).send({ error: 'Schedule not found' });
     }
@@ -1853,7 +1744,7 @@ fastify.post('/api/chores/complete', async (request, reply) => {
       return reply.status(409).send({ error: 'Chore already completed for this date' });
     }
 
-    db.prepare('INSERT INTO chore_history (user_id, chore_schedule_id, date, clam_value, title) VALUES (?, ?, ?, ?, ?)').run(user_id, chore_schedule_id, date, schedule.clam_value, schedule.title);
+    db.prepare('INSERT INTO chore_history (user_id, chore_schedule_id, date, title) VALUES (?, ?, ?, ?)').run(user_id, chore_schedule_id, date, schedule.title);
 
     if (schedule.parent_schedule_id) {
       const parentSchedule = db.prepare('SELECT id, duration, interval FROM chore_schedules WHERE id = ?').get(schedule.parent_schedule_id);
@@ -1870,11 +1761,7 @@ fastify.post('/api/chores/complete', async (request, reply) => {
       }
     }
 
-    awardDailyRegularBonusIfDue(user_id, date);
-
-    const totalResult = db.prepare('SELECT COALESCE(SUM(clam_value), 0) as total FROM chore_history WHERE user_id = ?').get(user_id);
-
-    return { success: true, clam_total: totalResult.total };
+    return { success: true };
   } catch (error) {
     console.error('Error completing chore:', error);
     reply.status(500).send({ error: 'Failed to complete chore' });
@@ -1888,123 +1775,24 @@ fastify.post('/api/chores/uncomplete', async (request, reply) => {
       return reply.status(400).send({ error: 'chore_schedule_id, user_id, and date are required' });
     }
 
-    const history = db.prepare('SELECT id, clam_value FROM chore_history WHERE chore_schedule_id = ? AND user_id = ? AND date = ?').get(chore_schedule_id, user_id, date);
+    const history = db.prepare('SELECT id FROM chore_history WHERE chore_schedule_id = ? AND user_id = ? AND date = ?').get(chore_schedule_id, user_id, date);
     if (!history) {
       return reply.status(404).send({ error: 'Completion record not found' });
     }
 
     db.prepare('DELETE FROM chore_history WHERE id = ?').run(history.id);
 
-    // if the uncompleted chore was a bonus chore (has clam value), don't remove the daily bonus when uncompleting
-    if (!history.clam_value) {
-      const dailyRewardSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('daily_completion_clam_reward');
-      const dailyReward = dailyRewardSetting ? parseInt(dailyRewardSetting.value, 10) : 2;
-
-      const bonusEntry = db.prepare(`
-      SELECT id FROM chore_history
-      WHERE user_id = ?
-      AND date = ?
-      AND chore_schedule_id IS NULL
-      AND clam_value = ?
-      AND title = ?
-    `).get(user_id, date, dailyReward, 'Regular chores');
-
-      if (bonusEntry) {
-        db.prepare('DELETE FROM chore_history WHERE id = ?').run(bonusEntry.id);
-      }
-    }
-
-    const totalResult = db.prepare('SELECT COALESCE(SUM(clam_value), 0) as total FROM chore_history WHERE user_id = ?').get(user_id);
-
-    return { success: true, clam_total: totalResult.total };
+    return { success: true };
   } catch (error) {
     console.error('Error uncompleting chore:', error);
     reply.status(500).send({ error: 'Failed to uncomplete chore' });
   }
 });
 
-// User clam management endpoints
-fastify.get('/api/users/:id/clams', async (request, reply) => {
-  const { id } = request.params;
-  try {
-    const result = db.prepare('SELECT COALESCE(SUM(clam_value), 0) as total FROM chore_history WHERE user_id = ?').get(id);
-    return { user_id: parseInt(id), clam_total: result.total };
-  } catch (error) {
-    console.error('Error getting user clams:', error);
-    reply.status(500).send({ error: 'Failed to get user clams' });
-  }
-});
-
-fastify.post('/api/users/:id/clams/add', async (request, reply) => {
-  const { id } = request.params;
-  const { amount, date } = request.body;
-  try {
-    if (!amount || amount <= 0) {
-      return reply.status(400).send({ error: 'Valid positive amount is required' });
-    }
-
-    const useDate = date || getTodayLocalDateString();
-    db.prepare('INSERT INTO chore_history (user_id, chore_schedule_id, date, clam_value, title) VALUES (?, NULL, ?, ?, ?)').run(id, useDate, amount, 'Adjustment');
-
-    const result = db.prepare('SELECT COALESCE(SUM(clam_value), 0) as total FROM chore_history WHERE user_id = ?').get(id);
-    return { success: true, clam_total: result.total };
-  } catch (error) {
-    console.error('Error adding clams:', error);
-    reply.status(500).send({ error: 'Failed to add clams' });
-  }
-});
-
-fastify.post('/api/users/:id/clams/reduce', async (request, reply) => {
-  const { id } = request.params;
-  const { amount } = request.body;
-  try {
-    if (!amount || amount <= 0) {
-      return reply.status(400).send({ error: 'Valid positive amount is required' });
-    }
-
-    const currentResult = db.prepare('SELECT COALESCE(SUM(clam_value), 0) as total FROM chore_history WHERE user_id = ?').get(id);
-    if (currentResult.total < amount) {
-      return reply.status(400).send({ error: 'Insufficient clams' });
-    }
-
-    let remaining = amount;
-    const entries = db.prepare('SELECT * FROM chore_history WHERE user_id = ? AND clam_value > 0 ORDER BY created_at ASC').all(id);
-
-    for (const entry of entries) {
-      if (remaining <= 0) break;
-
-      if (entry.clam_value <= remaining) {
-        db.prepare('DELETE FROM chore_history WHERE id = ?').run(entry.id);
-        remaining -= entry.clam_value;
-      } else {
-        db.prepare('UPDATE chore_history SET clam_value = ? WHERE id = ?').run(entry.clam_value - remaining, entry.id);
-        remaining = 0;
-      }
-    }
-
-    const result = db.prepare('SELECT COALESCE(SUM(clam_value), 0) as total FROM chore_history WHERE user_id = ?').get(id);
-    return { success: true, clam_total: result.total };
-  } catch (error) {
-    console.error('Error reducing clams:', error);
-    reply.status(500).send({ error: 'Failed to reduce clams' });
-  }
-});
-
-
-// User routes (updated to calculate clam_total from history)
+// User routes
 fastify.get('/api/users', async (request, reply) => {
   try {
-    const users = db.prepare('SELECT id, username, email, profile_picture FROM users').all();
-
-    const usersWithClams = users.map(user => {
-      const clamResult = db.prepare('SELECT COALESCE(SUM(clam_value), 0) as total FROM chore_history WHERE user_id = ?').get(user.id);
-      return {
-        ...user,
-        clam_total: clamResult.total
-      };
-    });
-
-    return usersWithClams;
+    return db.prepare('SELECT id, username, profile_picture FROM users').all();
   } catch (error) {
     console.error('Error fetching users:', error);
     reply.status(500).send({ error: 'Failed to fetch users' });
@@ -2012,10 +1800,13 @@ fastify.get('/api/users', async (request, reply) => {
 });
 
 fastify.post('/api/users', async (request, reply) => {
-  const { username, email, profile_picture } = request.body;
+  const { username, profile_picture } = request.body;
   try {
-    const stmt = db.prepare('INSERT INTO users (username, email, profile_picture) VALUES (?, ?, ?)');
-    const info = stmt.run(username, email, profile_picture);
+    if (!username || !String(username).trim()) {
+      return reply.status(400).send({ error: 'username is required' });
+    }
+    const stmt = db.prepare('INSERT INTO users (username, profile_picture) VALUES (?, ?)');
+    const info = stmt.run(String(username).trim(), profile_picture || null);
     return { id: info.lastInsertRowid };
   } catch (error) {
     console.error('Error adding user:', error);
@@ -2023,13 +1814,16 @@ fastify.post('/api/users', async (request, reply) => {
   }
 });
 
-// NEW: Endpoint to update user profile
+// Endpoint to update user profile
 fastify.patch('/api/users/:id', async (request, reply) => {
   const { id } = request.params;
-  const { username, email, profile_picture } = request.body;
+  const { username, profile_picture } = request.body;
   try {
-    const stmt = db.prepare('UPDATE users SET username = ?, email = ?, profile_picture = ? WHERE id = ?');
-    const info = stmt.run(username, email, profile_picture, id);
+    if (!username || !String(username).trim()) {
+      return reply.status(400).send({ error: 'username is required' });
+    }
+    const stmt = db.prepare('UPDATE users SET username = ?, profile_picture = ? WHERE id = ?');
+    const info = stmt.run(String(username).trim(), profile_picture || null, id);
     if (info.changes === 0) {
       return reply.status(404).send({ error: 'User not found' });
     }
@@ -2916,66 +2710,6 @@ fastify.get('/api/proxy', async (request, reply) => {
       error: 'Failed to proxy request.',
       details: error.message
     });
-  }
-});
-
-// Prize routes
-fastify.get('/api/prizes', async (request, reply) => {
-  try {
-    const rows = db.prepare('SELECT * FROM prizes').all();
-    return rows;
-  } catch (error) {
-    console.error('Error fetching prizes:', error);
-    reply.status(500).send({ error: 'Failed to fetch prizes' });
-  }
-});
-
-fastify.post('/api/prizes', async (request, reply) => {
-  const { name, clam_cost } = request.body;
-  if (!name || !clam_cost || clam_cost <= 0) {
-    return reply.status(400).send({ error: 'Prize name and a positive clam cost are required.' });
-  }
-  try {
-    const stmt = db.prepare('INSERT INTO prizes (name, clam_cost) VALUES (?, ?)');
-    const info = stmt.run(name, clam_cost);
-    return { id: info.lastInsertRowid };
-  } catch (error) {
-    console.error('Error adding prize:', error);
-    reply.status(500).send({ error: 'Failed to add prize' });
-  }
-});
-
-fastify.patch('/api/prizes/:id', async (request, reply) => {
-  const { id } = request.params;
-  const { name, clam_cost } = request.body;
-  if (!name || !clam_cost || clam_cost <= 0) {
-    return reply.status(400).send({ error: 'Prize name and a positive clam cost are required.' });
-  }
-  try {
-    const stmt = db.prepare('UPDATE prizes SET name = ?, clam_cost = ? WHERE id = ?');
-    const info = stmt.run(name, clam_cost, id);
-    if (info.changes === 0) {
-      return reply.status(404).send({ error: 'Prize not found' });
-    }
-    return { success: true, message: 'Prize updated successfully' };
-  } catch (error) {
-    console.error('Error updating prize:', error);
-    reply.status(500).send({ error: 'Failed to update prize' });
-  }
-});
-
-fastify.delete('/api/prizes/:id', async (request, reply) => {
-  const { id } = request.params;
-  try {
-    const stmt = db.prepare('DELETE FROM prizes WHERE id = ?');
-    const info = stmt.run(id);
-    if (info.changes === 0) {
-      return reply.status(404).send({ error: 'Prize not found' });
-    }
-    return { success: true, message: 'Prize deleted successfully' };
-  } catch (error) {
-    console.error('Error deleting prize:', error);
-    reply.status(500).send({ error: 'Failed to delete prize' });
   }
 });
 

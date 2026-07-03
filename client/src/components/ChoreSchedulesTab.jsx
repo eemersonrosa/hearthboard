@@ -127,7 +127,7 @@ const defaultScheduleForm = {
   visible: true
 };
 
-const defaultChoreForm = { title: '', description: '', clam_value: 0 };
+const defaultChoreForm = { title: '', description: '', is_bonus: false };
 
 export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
   const [schedules, setSchedules] = useState([]);
@@ -313,7 +313,7 @@ export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
 
   const openEditChore = (chore) => {
     setEditingChore(chore);
-    setChoreForm({ title: chore.title, description: chore.description || '', clam_value: chore.clam_value || 0 });
+    setChoreForm({ title: chore.title, description: chore.description || '', is_bonus: !!chore.is_bonus });
     setChoreDialogOpen(true);
   };
 
@@ -406,7 +406,7 @@ export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
       </Box>
 
       <Alert severity="info" sx={{ mb: 2 }}>
-        Chore definitions hold the title, description, and clam value. Add schedules below to assign them to users with a recurrence pattern.
+        Chore definitions hold the title and description. Add schedules below to assign them to users with a recurrence pattern. Bonus chores are unassigned extras anyone can pick up; they reset each day.
       </Alert>
 
       <TableContainer component={Paper} sx={{ mb: 4 }}>
@@ -415,7 +415,7 @@ export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
             <TableRow>
               <TableCell>Title</TableCell>
               <TableCell>Description</TableCell>
-              <TableCell>Clams</TableCell>
+              <TableCell>Bonus</TableCell>
               <TableCell>Schedules</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
@@ -439,8 +439,8 @@ export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    {c.clam_value > 0
-                      ? <Chip label={`${c.clam_value} 🥟`} size="small" color="primary" />
+                    {c.is_bonus
+                      ? <Chip label="Bonus" size="small" color="primary" />
                       : <Typography variant="caption" color="text.secondary">—</Typography>}
                   </TableCell>
                   <TableCell>
@@ -521,7 +521,7 @@ export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
               <TableCell>Crontab</TableCell>
               <TableCell>Next Occurrence</TableCell>
               <TableCell>Duration</TableCell>
-              <TableCell>Clams</TableCell>
+              <TableCell>Bonus</TableCell>
               <TableCell>Visible</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
@@ -572,8 +572,8 @@ export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
                     )}
                   </TableCell>
                   <TableCell>
-                    {s.clam_value > 0
-                      ? <Chip label={`${s.clam_value} 🥟`} size="small" color="primary" />
+                    {s.is_bonus
+                      ? <Chip label="Bonus" size="small" color="primary" />
                       : <Typography variant="caption" color="text.secondary">—</Typography>}
                   </TableCell>
                   <TableCell>
@@ -643,14 +643,15 @@ export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
               multiline
               rows={2}
             />
-            <TextField
-              size="small"
-              label="Clam Value"
-              type="number"
-              value={choreForm.clam_value}
-              onChange={(e) => setChoreForm(f => ({ ...f, clam_value: parseInt(e.target.value) || 0 }))}
-              slotProps={{ htmlInput: { min: 0 } }}
-              sx={{ width: 140 }}
+            <FormControlLabel
+              control={(
+                <Switch
+                  size="small"
+                  checked={choreForm.is_bonus}
+                  onChange={(e) => setChoreForm(f => ({ ...f, is_bonus: e.target.checked }))}
+                />
+              )}
+              label="Bonus chore (unassigned extra anyone can pick up)"
             />
           </Box>
         </DialogContent>
@@ -721,7 +722,7 @@ export default function ChoreSchedulesTab({ saveMessage, setSaveMessage }) {
                   <MenuItem key={c.id} value={c.id}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                       <span>{c.title}</span>
-                      {c.clam_value > 0 && <Chip label={`${c.clam_value} 🥟`} size="small" sx={{ ml: 1 }} />}
+                      {!!c.is_bonus && <Chip label="Bonus" size="small" sx={{ ml: 1 }} />}
                     </Box>
                   </MenuItem>
                 ))}

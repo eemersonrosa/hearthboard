@@ -73,7 +73,6 @@ import ChoreSchedulesTab from './ChoreSchedulesTab';
 import ChoreHistoryTab from './ChoreHistoryTab';
 import TabIconModal from './TabIconModal';
 import GoogleAccountConnection from './GoogleAccountConnection';
-import ClamValueModal from './ClamValueModal';
 
 const USERS_UPDATED_EVENT = 'hearthboard:users-updated';
 const DEVICE_SETTINGS_UPDATED_EVENT = 'hearthboard:device-settings-updated';
@@ -216,8 +215,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
   const [widgetsSubTab, setWidgetsSubTab] = useState(0);
   const [settings, setSettings] = useState({
     WEATHER_API_KEY: '',
-    PROXY_WHITELIST: '',
-    daily_completion_clam_reward: '2'
+    PROXY_WHITELIST: ''
   });
   const [widgetSettings, setLocalWidgetSettings] = useState({
     ...DEFAULT_WIDGET_SETTINGS
@@ -225,12 +223,8 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
   const [interfaceColors, setInterfaceColors] = useState(readLocalInterfaceColors);
   const [users, setUsers] = useState([]);
   const [chores, setChores] = useState([]);
-  const [prizes, setPrizes] = useState([]);
   const [editingUser, setEditingUser] = useState(null);
-  const [clamModalUser, setClamModalUser] = useState(null);
-  const [editingPrize, setEditingPrize] = useState(null);
-  const [newUser, setNewUser] = useState({ username: '', email: '', profile_picture: '' });
-  const [newPrize, setNewPrize] = useState({ name: '', clam_cost: 0 });
+  const [newUser, setNewUser] = useState({ username: '', profile_picture: '' });
   const [uploadedWidgets, setUploadedWidgets] = useState([]);
   const [githubWidgets, setGithubWidgets] = useState([]);
   const [loadingGithub, setLoadingGithub] = useState(false);
@@ -308,7 +302,6 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
       fetchDeviceSettings();
       fetchUsers();
       fetchChores();
-      fetchPrizes();
       fetchUploadedWidgets();
       fetchTabs();
       fetchWidgetAssignments();
@@ -318,7 +311,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!isAuthenticated || activeTab !== 7) {
+    if (!isAuthenticated || activeTab !== 6) {
       return;
     }
 
@@ -416,16 +409,6 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
     } catch (error) {
       console.error('Error fetching chores:', error);
       setChores([]);
-    }
-  };
-
-  const fetchPrizes = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/prizes`);
-      setPrizes(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error('Error fetching prizes:', error);
-      setPrizes([]);
     }
   };
 
@@ -565,24 +548,6 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
         setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
       }
       throw error;
-    }
-  };
-
-  const saveDailyClamReward = async () => {
-    setIsLoading(true);
-    try {
-      await axios.post(`${API_BASE_URL}/api/settings`, {
-        key: 'daily_completion_clam_reward',
-        value: settings.daily_completion_clam_reward || '2',
-      });
-      setSaveMessage({ show: true, type: 'success', text: 'Daily completion clam reward saved.' });
-      setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
-    } catch (error) {
-      console.error('Error saving clam reward:', error);
-      setSaveMessage({ show: true, type: 'error', text: 'Failed to save clam reward. Please try again.' });
-      setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -1321,7 +1286,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
         await axios.patch(`${API_BASE_URL}/api/users/${editingUser.id}`, editingUser);
       } else {
         await axios.post(`${API_BASE_URL}/api/users`, newUser);
-        setNewUser({ username: '', email: '', profile_picture: '' });
+        setNewUser({ username: '', profile_picture: '' });
       }
       setEditingUser(null);
       fetchUsers();
@@ -1359,64 +1324,6 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
 
   const handleUserDelete = (user) => {
     setDeleteUserDialog({ open: true, user });
-  };
-
-  const updateUserClams = async (userId, newTotal) => {
-    try {
-      setIsLoading(true);
-      const user = users.find(u => u.id === userId);
-      const currentTotal = user?.clam_total || 0;
-      const diff = newTotal - currentTotal;
-
-      if (diff > 0) {
-        await axios.post(`${API_BASE_URL}/api/users/${userId}/clams/add`, { amount: diff });
-      } else if (diff < 0) {
-        await axios.post(`${API_BASE_URL}/api/users/${userId}/clams/reduce`, { amount: Math.abs(diff) });
-      }
-      fetchUsers();
-    } catch (error) {
-      console.error('Error updating user clams:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleClamSave = async (newTotal) => {
-    if (!clamModalUser) return;
-    await updateUserClams(clamModalUser.id, newTotal);
-    setClamModalUser(null);
-  };
-
-  const savePrize = async () => {
-    try {
-      setIsLoading(true);
-      if (editingPrize) {
-        await axios.patch(`${API_BASE_URL}/api/prizes/${editingPrize.id}`, editingPrize);
-      } else {
-        await axios.post(`${API_BASE_URL}/api/prizes`, newPrize);
-        setNewPrize({ name: '', clam_cost: 0 });
-      }
-      setEditingPrize(null);
-      fetchPrizes();
-    } catch (error) {
-      console.error('Error saving prize:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const deletePrize = async (prizeId) => {
-    if (window.confirm('Are you sure you want to delete this prize?')) {
-      try {
-        setIsLoading(true);
-        await axios.delete(`${API_BASE_URL}/api/prizes/${prizeId}`);
-        fetchPrizes();
-      } catch (error) {
-        console.error('Error deleting prize:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    }
   };
 
   const handleWidgetUpload = async (event) => {
@@ -1711,7 +1618,6 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
     'Interface',
     'Users',
     'Chores',
-    'Prizes',
     'Security',
     'Connections',
     'About'
@@ -2711,28 +2617,19 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                 }}
               >
                 <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, sm: 4 }}>
+                  <Grid size={{ xs: 12, sm: 8 }}>
                     <TextField
                       fullWidth
-                      label="Username"
+                      label="Name"
                       value={newUser.username}
                       onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 4 }}>
-                    <TextField
-                      fullWidth
-                      label="Email"
-                      type="email"
-                      value={newUser.email}
-                      onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                     />
                   </Grid>
                   <Grid size={{ xs: 12, sm: 4 }}>
                     <Button
                       type="submit"
                       variant="contained"
-                      disabled={!newUser.username || !newUser.email}
+                      disabled={!newUser.username.trim()}
                       fullWidth
                       sx={{ height: '56px' }}
                     >
@@ -2748,9 +2645,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                 <TableHead>
                   <TableRow>
                     <TableCell>Avatar</TableCell>
-                    <TableCell>Username</TableCell>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Clam Total</TableCell>
+                    <TableCell>Name</TableCell>
                     <TableCell>Chores</TableCell>
                     <TableCell>Actions</TableCell>
                   </TableRow>
@@ -2786,35 +2681,6 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                         ) : (
                           user.username
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {editingUser?.id === user.id ? (
-                          <TextField
-                            value={editingUser.email}
-                            onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                            size="small"
-                          />
-                        ) : (
-                          user.email
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip
-                            label={`${user.clam_total || 0} 🥟`}
-                            color="primary"
-                            size="small"
-                          />
-                          <Tooltip title="Edit clams">
-                            <IconButton
-                              onClick={() => setClamModalUser(user)}
-                              color="primary"
-                              size="small"
-                            >
-                              <Edit />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
                       </TableCell>
                       <TableCell>
                         <Button
@@ -2876,32 +2742,6 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
               </Alert>
             )}
 
-            <Box sx={{ mb: 3, p: 2, border: '1px solid var(--card-border)', borderRadius: 1 }}>
-              <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 600 }}>
-                Rewards
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2, alignItems: { sm: 'flex-start' } }}>
-                <TextField
-                  label="Daily Completion Clam Reward"
-                  type="number"
-                  value={settings.daily_completion_clam_reward || '2'}
-                  onChange={(e) => setSettings(prev => ({ ...prev, daily_completion_clam_reward: e.target.value }))}
-                  helperText="Clams awarded when a user completes all their daily chores"
-                  slotProps={{ htmlInput: { min: 0, max: 100 } }}
-                  sx={{ maxWidth: 340, flex: 1 }}
-                />
-                <Button
-                  variant="contained"
-                  onClick={saveDailyClamReward}
-                  disabled={isLoading}
-                  startIcon={<Save />}
-                  sx={{ alignSelf: { xs: 'stretch', sm: 'center' }, mt: { xs: 0, sm: 1 } }}
-                >
-                  {isLoading ? 'Saving...' : 'Save'}
-                </Button>
-              </Box>
-            </Box>
-
             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
               <Tabs value={choresSubTab} onChange={(_, v) => setChoresSubTab(v)} size="small">
                 <Tab label="Chores" />
@@ -2918,104 +2758,8 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
         </Card>
       )}
 
-      {/* Prizes Tab */}
-      {activeTab === 4 && (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>Prize Management</Typography>
-
-            <Box sx={{ mb: 3, p: 2, border: '1px solid var(--card-border)', borderRadius: 1 }}>
-              <Typography variant="subtitle1" sx={{ mb: 2 }}>Add New Prize</Typography>
-              <Box
-                component="form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  savePrize();
-                }}
-              >
-                <Grid container spacing={2}>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      fullWidth
-                      label="Prize Name"
-                      value={newPrize.name}
-                      onChange={(e) => setNewPrize({ ...newPrize, name: e.target.value })}
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 3 }}>
-                    <TextField
-                      fullWidth
-                      label="Clam Cost"
-                      type="number"
-                      value={newPrize.clam_cost}
-                      onChange={(e) => setNewPrize({ ...newPrize, clam_cost: parseInt(e.target.value) || 0 })}
-                    />
-                  </Grid>
-                  <Grid size={{ xs: 12, sm: 3 }}>
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      disabled={!newPrize.name || newPrize.clam_cost <= 0}
-                      fullWidth
-                      sx={{ height: '56px' }}
-                    >
-                      Add Prize
-                    </Button>
-                  </Grid>
-                </Grid>
-              </Box>
-            </Box>
-
-            <List>
-              {prizes.map((prize) => (
-                <ListItem key={prize.id} sx={{ border: '1px solid var(--card-border)', borderRadius: 1, mb: 1 }}>
-                  {editingPrize?.id === prize.id ? (
-                    <Box sx={{ display: 'flex', gap: 2, width: '100%', alignItems: 'center' }}>
-                      <TextField
-                        label="Prize Name"
-                        value={editingPrize.name}
-                        onChange={(e) => setEditingPrize({ ...editingPrize, name: e.target.value })}
-                        sx={{ flex: 1 }}
-                      />
-                      <TextField
-                        label="Clam Cost"
-                        type="number"
-                        value={editingPrize.clam_cost}
-                        onChange={(e) => setEditingPrize({ ...editingPrize, clam_cost: parseInt(e.target.value) || 0 })}
-                        sx={{ width: 120 }}
-                      />
-                      <IconButton onClick={savePrize} color="primary">
-                        <Save />
-                      </IconButton>
-                      <IconButton onClick={() => setEditingPrize(null)}>
-                        <Cancel />
-                      </IconButton>
-                    </Box>
-                  ) : (
-                    <>
-                      <ListItemText
-                        primary={prize.name}
-                        secondary={`Cost: ${prize.clam_cost} 🥟`}
-                      />
-                      <ListItemSecondaryAction>
-                        <IconButton onClick={() => setEditingPrize({ ...prize })} color="primary">
-                          <Edit />
-                        </IconButton>
-                        <IconButton onClick={() => deletePrize(prize.id)} color="error">
-                          <Delete />
-                        </IconButton>
-                      </ListItemSecondaryAction>
-                    </>
-                  )}
-                </ListItem>
-              ))}
-            </List>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Security Tab */}
-      {activeTab === 5 && (
+      {activeTab === 4 && (
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>Security Settings</Typography>
@@ -3118,7 +2862,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
       )}
 
       {/* Connections Tab */}
-      {activeTab === 6 && (
+      {activeTab === 5 && (
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>Connections</Typography>
@@ -3185,7 +2929,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
       )}
 
       {/* About Tab */}
-      {activeTab === 7 && (
+      {activeTab === 6 && (
         <Card>
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -3584,7 +3328,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                     <TableCell>Description</TableCell>
                     <TableCell>Schedule (Crontab)</TableCell>
                     <TableCell>Visible</TableCell>
-                    <TableCell>Clams</TableCell>
+                    <TableCell>Type</TableCell>
                     <TableCell>Actions</TableCell>
                   </TableRow>
                 </TableHead>
@@ -3614,12 +3358,8 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                         />
                       </TableCell>
                       <TableCell>
-                        {chore.clam_value > 0 ? (
-                          <Chip
-                            label={`${chore.clam_value} 🥟`}
-                            color="primary"
-                            size="small"
-                          />
+                        {chore.is_bonus ? (
+                          <Chip label="Bonus" color="primary" size="small" />
                         ) : (
                           <Typography variant="body2" color="text.secondary">
                             Regular
@@ -3690,8 +3430,8 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                 sx={{
                   position: 'absolute',
                   fontSize: '2rem',
-                  animation: `clamBounce 1.5s ease-in-out ${index * 0.2}s infinite`,
-                  '@keyframes clamBounce': {
+                  animation: `settingsBounce 1.5s ease-in-out ${index * 0.2}s infinite`,
+                  '@keyframes settingsBounce': {
                     '0%, 80%, 100%': {
                       transform: 'scale(0.8) translateY(0)',
                       opacity: 0.6,
@@ -3703,7 +3443,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                   },
                 }}
               >
-                🥟
+                ⚙️
               </Box>
             ))}
           </Box>
@@ -3742,13 +3482,6 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
         title={pinModal.title}
       />
 
-      <ClamValueModal
-        open={!!clamModalUser}
-        user={clamModalUser}
-        onClose={() => setClamModalUser(null)}
-        onSave={handleClamSave}
-        isSaving={isLoading}
-      />
     </Box>
   );
 };

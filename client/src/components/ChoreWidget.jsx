@@ -38,22 +38,19 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
   const [chores, setChores] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [history, setHistory] = useState([]);
-  const [prizes, setPrizes] = useState([]);
   const [newChore, setNewChore] = useState({
     user_id: '',
     title: '',
     description: '',
     assigned_days_of_week: ['monday'],
-    clam_value: 0,
+    is_bonus: false,
     is_one_time: false
   });
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [showPrizesModal, setShowPrizesModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showBonusChores, setShowBonusChores] = useState(true);
   const [deviceSettingsLoaded, setDeviceSettingsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [dailyClamReward, setDailyClamReward] = useState(2);
   const [reassignAnchor, setReassignAnchor] = useState(null);
   const [reassignSchedule, setReassignSchedule] = useState(null);
 
@@ -134,9 +131,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
         fetchUsers(),
         fetchChores(),
         fetchSchedules(),
-        fetchHistory(),
-        fetchPrizes(),
-        fetchSettings()
+        fetchHistory()
       ]);
       setLoading(false);
     } catch (error) {
@@ -145,21 +140,10 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
     }
   };
 
-  const fetchSettings = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/settings`);
-      if (response.data.daily_completion_clam_reward) {
-        setDailyClamReward(parseInt(response.data.daily_completion_clam_reward, 10));
-      }
-    } catch (error) {
-      console.error('Error fetching settings:', error);
-    }
-  };
-
   const fetchUsers = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/users`);
-      setUsers(response.data.filter(user => user.id !== 0));
+      setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
     }
@@ -190,15 +174,6 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
       setHistory(response.data);
     } catch (error) {
       console.error('Error fetching history:', error);
-    }
-  };
-
-  const fetchPrizes = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/prizes`);
-      setPrizes(response.data);
-    } catch (error) {
-      console.error('Error fetching prizes:', error);
     }
   };
 
@@ -238,7 +213,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
       const userBonusSchedules = schedules.filter(s =>
         s.user_id === userId &&
         s.visible === 1 &&
-        s.clam_value > 0
+        s.is_bonus
       );
 
       const hasUncompletedBonusChoreToday = userBonusSchedules.some(schedule => {
@@ -316,7 +291,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
       const choreResponse = await axios.post(`${API_BASE_URL}/api/chores`, {
         title: newChore.title,
         description: newChore.description,
-        clam_value: newChore.clam_value
+        is_bonus: newChore.is_bonus
       });
 
       const choreId = choreResponse.data.id;
@@ -334,7 +309,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
         title: '',
         description: '',
         assigned_days_of_week: ['monday'],
-        clam_value: 0,
+        is_bonus: false,
         is_one_time: false
       });
       setShowAddDialog(false);
@@ -438,23 +413,6 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
             {user.username.charAt(0).toUpperCase()}
           </Avatar>
         )}
-
-        <Chip
-          label={`${user.clam_total || 0} 🥟`}
-          size="small"
-          sx={{
-            position: 'absolute',
-            top: -8,
-            right: -8,
-            bgcolor: 'var(--accent)',
-            color: 'white',
-            fontSize: '0.7rem',
-            height: 24,
-            '& .MuiChip-label': {
-              px: 1
-            }
-          }}
-        />
       </Box>
     );
   };
@@ -477,9 +435,9 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
         <Box sx={{ flex: 1 }}>
           <Typography variant="subtitle2" sx={{ fontWeight: schedule.completed ? 'normal' : 'bold', fontSize: '0.85rem' }}>
             {schedule.title}
-            {schedule.clam_value > 0 && (
+            {!!schedule.is_bonus && (
               <Chip
-                label={`${schedule.clam_value} 🥟`}
+                label="Bonus"
                 size="small"
                 sx={{ ml: 1, bgcolor: 'var(--accent)', color: 'white' }}
               />
@@ -570,7 +528,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
         p: 2
       }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">🥟 Daily Chores</Typography>
+          <Typography variant="h6">Daily Chores</Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
               onClick={() => setShowBonusChores(!showBonusChores)}
@@ -579,15 +537,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
               sx={{ minWidth: 'auto', px: 1 }}
               title={showBonusChores ? "Hide Bonus Chores" : "Show Bonus Chores"}
             >
-              🥟
-            </Button>
-            <Button
-              onClick={() => setShowPrizesModal(true)}
-              variant="outlined"
-              size="small"
-              sx={{ minWidth: 'auto', px: 1 }}
-            >
-              🛍️
+              ⭐
             </Button>
             <Button
               startIcon={<Add />}
@@ -609,10 +559,10 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
             alignItems: 'flex-start',
             width: '100%'
           }}>
-            {users.filter(user => user.id !== 0).map(user => {
+            {users.map(user => {
               const userChores = getUserChoresForToday(user.id);
-              const completedChores = userChores.filter(c => c.completed && c.clam_value === 0).length;
-              const totalRegularChores = userChores.filter(c => c.clam_value === 0).length;
+              const completedChores = userChores.filter(c => c.completed && !c.is_bonus).length;
+              const totalRegularChores = userChores.filter(c => !c.is_bonus).length;
               const allRegularChoresCompleted = totalRegularChores > 0 && completedChores === totalRegularChores;
 
               return (
@@ -638,7 +588,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
                     </Typography>
                     {allRegularChoresCompleted && (
                       <Chip
-                        label={`All Done! +${dailyClamReward} 🥟`}
+                        label="All done!"
                         color="success"
                         size="small"
                         sx={{ mt: 1 }}
@@ -675,7 +625,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
                 }}
               >
                 <Typography variant="subtitle1" sx={{ textAlign: 'center', mb: 2, color: 'var(--accent)', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                  🥟 Bonus Chores
+                  ⭐ Bonus Chores
                 </Typography>
 
                 <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
@@ -700,11 +650,6 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
                       >
                         <Typography variant="subtitle2">
                           {schedule.title}
-                          <Chip
-                            label={`${schedule.clam_value} 🥟`}
-                            size="small"
-                            sx={{ ml: 1, bgcolor: 'var(--accent)', color: 'white' }}
-                          />
                         </Typography>
                         {schedule.description && (
                           <Typography variant="caption" color="text.secondary">
@@ -732,58 +677,6 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
             )}
           </Box>
         </Box>
-
-        <Dialog open={showPrizesModal} onClose={() => setShowPrizesModal(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>
-            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              🛍️ Available Prizes
-            </Typography>
-          </DialogTitle>
-          <DialogContent>
-            {prizes.length === 0 ? (
-              <Typography variant="body1" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-                No prizes available. Ask an admin to add some prizes!
-              </Typography>
-            ) : (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-                {prizes.map((prize) => (
-                  <Box
-                    key={prize.id}
-                    sx={{
-                      p: 2,
-                      border: '1px solid var(--card-border)',
-                      borderRadius: 2,
-                      bgcolor: 'rgba(var(--accent-rgb), 0.05)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}
-                  >
-                    <Box>
-                      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                        {prize.name}
-                      </Typography>
-                    </Box>
-                    <Chip
-                      label={`${prize.clam_cost} 🥟`}
-                      sx={{
-                        bgcolor: 'var(--accent)',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        fontSize: '0.9rem'
-                      }}
-                    />
-                  </Box>
-                ))}
-              </Box>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setShowPrizesModal(false)} variant="contained">
-              Close
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         <Dialog
           open={showAddDialog}
@@ -871,12 +764,15 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
               </Box>
             )}
 
-            <TextField
-              fullWidth
-              type="number"
-              label="🥟 Clam Value (0 for regular chore)"
-              value={newChore.clam_value}
-              onChange={(e) => setNewChore({ ...newChore, clam_value: parseInt(e.target.value) || 0 })}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={newChore.is_bonus}
+                  onChange={(e) => setNewChore({ ...newChore, is_bonus: e.target.checked })}
+                  color="primary"
+                />
+              }
+              label="Bonus chore (extra credit, anyone can pick it up)"
             />
           </DialogContent>
           <DialogActions>
@@ -950,8 +846,8 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
                 sx={{
                   position: 'absolute',
                   fontSize: '2rem',
-                  animation: `clamBounce 1.5s ease-in-out ${index * 0.2}s infinite`,
-                  '@keyframes clamBounce': {
+                  animation: `choreBounce 1.5s ease-in-out ${index * 0.2}s infinite`,
+                  '@keyframes choreBounce': {
                     '0%, 80%, 100%': {
                       transform: 'scale(0.8) translateY(0)',
                       opacity: 0.6,
@@ -963,7 +859,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
                   },
                 }}
               >
-                🥟
+                🧹
               </Box>
             ))}
           </Box>

@@ -3,23 +3,15 @@ async function initializeDatabase(db) {
         db.exec(`
             CREATE TABLE IF NOT EXISTS chores (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                title TEXT,
+                title TEXT NOT NULL,
                 description TEXT,
-                time_period TEXT,
-                assigned_day_of_week TEXT,
-                repeat_type TEXT,
-                completed BOOLEAN,
-                clam_value INTEGER DEFAULT 0,
-                expiration_date TEXT
+                is_bonus INTEGER DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT,
-                email TEXT,
                 profile_picture TEXT
             );
-            INSERT OR IGNORE INTO users (id, username, email, profile_picture) VALUES (0, 'bonus', 'bonus@example.com', '');
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
@@ -31,11 +23,6 @@ async function initializeDatabase(db) {
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT
-            );
-            CREATE TABLE IF NOT EXISTS prizes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                clam_cost INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS calendar_sources (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

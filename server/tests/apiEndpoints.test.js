@@ -424,50 +424,27 @@ test('settings endpoints persist and query values', async () => {
     assert.deepEqual(searchRes.body.TEST_SETTING_JSON, { featureEnabled: true, retries: 2 });
 });
 
-test('prize endpoints validate and support CRUD lifecycle', async () => {
-    const invalidRes = await api('/api/prizes', {
-        method: 'POST',
-        body: JSON.stringify({ name: 'Invalid', clam_cost: 0 }),
-    });
-    assert.equal(invalidRes.status, 400);
+test('prize endpoints are removed', async () => {
+    const listRes = await api('/api/prizes');
+    assert.equal(listRes.status, 404);
 
     const createRes = await api('/api/prizes', {
         method: 'POST',
         body: JSON.stringify({ name: 'Movie Night', clam_cost: 15 }),
     });
-    assert.equal(createRes.status, 200);
-    assert.equal(typeof createRes.body.id, 'number');
-
-    const prizeId = createRes.body.id;
-
-    const listRes = await api('/api/prizes');
-    assert.equal(listRes.status, 200);
-    assert.ok(Array.isArray(listRes.body));
-    assert.ok(listRes.body.some((row) => row.id === prizeId && row.name === 'Movie Night'));
-
-    const updateRes = await api(`/api/prizes/${prizeId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ name: 'Pizza Night', clam_cost: 20 }),
-    });
-    assert.equal(updateRes.status, 200);
-    assert.equal(updateRes.body.success, true);
-
-    const deleteRes = await api(`/api/prizes/${prizeId}`, { method: 'DELETE' });
-    assert.equal(deleteRes.status, 200);
-    assert.equal(deleteRes.body.success, true);
-
-    const deleteAgainRes = await api(`/api/prizes/${prizeId}`, { method: 'DELETE' });
-    assert.equal(deleteAgainRes.status, 404);
+    assert.equal(createRes.status, 404);
 });
 
-test('user endpoints support create, list, and update', async () => {
+test('user endpoints support name-only create, list, and update', async () => {
+    const missingNameRes = await api('/api/users', {
+        method: 'POST',
+        body: JSON.stringify({ username: '   ' }),
+    });
+    assert.equal(missingNameRes.status, 400);
+
     const createRes = await api('/api/users', {
         method: 'POST',
-        body: JSON.stringify({
-            username: 'Test User',
-            email: 'test-user@example.com',
-            profile_picture: null,
-        }),
+        body: JSON.stringify({ username: 'Test User' }),
     });
 
     assert.equal(createRes.status, 200);
@@ -482,13 +459,13 @@ test('user endpoints support create, list, and update', async () => {
     const user = listRes.body.find((row) => row.id === userId);
     assert.ok(user);
     assert.equal(user.username, 'Test User');
-    assert.equal(typeof user.clam_total, 'number');
+    assert.ok(!('email' in user), 'users are name-only; no email field');
+    assert.ok(!('clam_total' in user), 'reward economy removed; no clam_total field');
 
     const updateRes = await api(`/api/users/${userId}`, {
         method: 'PATCH',
         body: JSON.stringify({
             username: 'Updated User',
-            email: 'updated-user@example.com',
             profile_picture: null,
         }),
     });
