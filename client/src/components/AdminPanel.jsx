@@ -67,7 +67,8 @@ import {
   Palette,
   People,
   TaskAlt,
-  Cable
+  Cable,
+  SettingsBackupRestore
 } from '@mui/icons-material';
 import ColorPickerPopover from './ColorPickerPopover';
 import axios from 'axios';
@@ -298,6 +299,15 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
     newName: '',
     error: '',
   });
+  const [backupEncrypt, setBackupEncrypt] = useState(false);
+  const [backupPassphrase, setBackupPassphrase] = useState('');
+  const [backupExporting, setBackupExporting] = useState(false);
+  const [backupImporting, setBackupImporting] = useState(false);
+  const [importFileData, setImportFileData] = useState(null);
+  const [importFileName, setImportFileName] = useState('');
+  const [importFileError, setImportFileError] = useState('');
+  const [importPassphrase, setImportPassphrase] = useState('');
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [backendStats, setBackendStats] = useState(null);
   const [aboutLoading, setAboutLoading] = useState(false);
   const [aboutTagsLoading, setAboutTagsLoading] = useState(false);
@@ -340,7 +350,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (!isAuthenticated || activeTab !== 6) {
+    if (!isAuthenticated || activeTab !== 7) {
       return;
     }
 
@@ -1708,6 +1718,73 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
     </Box>
   );
 
+  const handleExportConfig = async () => {
+    if (backupEncrypt && backupPassphrase.length < 4) {
+      setSaveMessage({ show: true, type: 'error', text: 'Enter a passphrase of at least 4 characters to encrypt the export.' });
+      return;
+    }
+    setBackupExporting(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/config/export`, {
+        encrypt: backupEncrypt,
+        passphrase: backupEncrypt ? backupPassphrase : '',
+      });
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `hearthboard-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setSaveMessage({ show: true, type: 'success', text: `Configuration exported${backupEncrypt ? ' (encrypted)' : ''}.` });
+    } catch (error) {
+      console.error('Error exporting configuration:', error);
+      setSaveMessage({ show: true, type: 'error', text: error.response?.data?.error || 'Failed to export configuration.' });
+    } finally {
+      setBackupExporting(false);
+    }
+  };
+
+  const handleImportFileSelected = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setImportFileData(null);
+    setImportFileName('');
+    setImportFileError('');
+    setImportPassphrase('');
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!parsed || parsed.type !== 'hearthboard-config-export') {
+        setImportFileError('This file is not a Hearthboard configuration export.');
+        return;
+      }
+      setImportFileData(parsed);
+      setImportFileName(file.name);
+    } catch {
+      setImportFileError('Could not read the file. It is not valid JSON.');
+    }
+  };
+
+  const handleImportConfig = async () => {
+    setImportConfirmOpen(false);
+    setBackupImporting(true);
+    try {
+      await axios.post(`${API_BASE_URL}/api/config/import`, {
+        file: importFileData,
+        passphrase: importFileData?.encrypted ? importPassphrase : '',
+      });
+      setSaveMessage({ show: true, type: 'success', text: 'Configuration imported. Reloading…' });
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (error) {
+      console.error('Error importing configuration:', error);
+      setSaveMessage({ show: true, type: 'error', text: error.response?.data?.error || 'Failed to import configuration.' });
+      setBackupImporting(false);
+    }
+  };
+
   const getRefreshIntervalLabel = (interval) => {
     const option = refreshIntervalOptions.find(opt => opt.value === interval);
     return option ? option.label : 'Disabled';
@@ -1720,6 +1797,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
     { label: 'Chores', icon: <TaskAlt fontSize="small" />, description: 'Define chores, schedule them, and review completion history.' },
     { label: 'Security', icon: <Lock fontSize="small" />, description: 'Protect these settings with a PIN.' },
     { label: 'Connections', icon: <Cable fontSize="small" />, description: 'External services: weather, proxies, Google, and Home Assistant.' },
+    { label: 'Backup', icon: <SettingsBackupRestore fontSize="small" />, description: 'Export the full configuration to a file, or restore it on another deployment.' },
     { label: 'About', icon: <Info fontSize="small" />, description: 'Version, build, and update information.' },
   ];
 
@@ -3255,6 +3333,139 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
 
       {/* About Tab */}
       {activeTab === 6 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {saveMessage.show && (
+            <Alert severity={saveMessage.type} onClose={() => setSaveMessage({ show: false, type: '', text: '' })}>
+              {saveMessage.text}
+            </Alert>
+          )}
+
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 1 }}>Export Configuration</Typography>
+              <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 2 }}>
+                Downloads a single file with all settings, devices, tabs, widget layouts and sizes, users, chores,
+                schedules, history, and calendar and photo sources — everything needed to redeploy Hearthboard on
+                another machine. Uploaded files (photos, sounds, profile pictures, plugin widgets) and linked Google
+                accounts are not included.
+              </Typography>
+              <FormControlLabel
+                control={(
+                  <Switch
+                    checked={backupEncrypt}
+                    onChange={(e) => setBackupEncrypt(e.target.checked)}
+                  />
+                )}
+                label="Encrypt export file"
+              />
+              {backupEncrypt ? (
+                <TextField
+                  type="password"
+                  label="Passphrase"
+                  value={backupPassphrase}
+                  onChange={(e) => setBackupPassphrase(e.target.value)}
+                  size="small"
+                  fullWidth
+                  sx={{ mt: 2 }}
+                  helperText="You will need this passphrase to import the file. It cannot be recovered."
+                />
+              ) : (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  Unencrypted exports contain secrets in plain text (API keys, calendar passwords, connection tokens).
+                  Store the file somewhere safe, or enable encryption.
+                </Alert>
+              )}
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  variant="contained"
+                  startIcon={backupExporting ? <CircularProgress size={16} color="inherit" /> : <CloudDownload />}
+                  onClick={handleExportConfig}
+                  disabled={backupExporting || (backupEncrypt && backupPassphrase.length < 4)}
+                >
+                  {backupExporting ? 'Exporting…' : 'Export Configuration'}
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 1 }}>Import Configuration</Typography>
+              <Typography variant="body2" sx={{ color: 'var(--text-secondary)', mb: 2 }}>
+                Restores a previously exported configuration file. This replaces all current settings, devices, tabs,
+                users, chores, and sources on this server.
+              </Typography>
+              <Button variant="outlined" component="label" startIcon={<Upload />} disabled={backupImporting}>
+                Choose Backup File
+                <input type="file" hidden accept=".json,application/json" onChange={handleImportFileSelected} />
+              </Button>
+              {importFileError && (
+                <Alert severity="error" sx={{ mt: 2 }}>{importFileError}</Alert>
+              )}
+              {importFileData && (
+                <Box sx={{ mt: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1 }}>
+                    <Chip label={importFileName} size="small" />
+                    {importFileData.exported_at && (
+                      <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+                        Exported {new Date(importFileData.exported_at).toLocaleString()}
+                      </Typography>
+                    )}
+                    <Chip
+                      label={importFileData.encrypted ? 'Encrypted' : 'Not encrypted'}
+                      size="small"
+                      color={importFileData.encrypted ? 'success' : 'default'}
+                    />
+                  </Box>
+                  {importFileData.encrypted && (
+                    <TextField
+                      type="password"
+                      label="Passphrase"
+                      value={importPassphrase}
+                      onChange={(e) => setImportPassphrase(e.target.value)}
+                      size="small"
+                      fullWidth
+                      sx={{ mb: 1 }}
+                      helperText="Enter the passphrase used when this file was exported."
+                    />
+                  )}
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    Importing replaces the entire configuration of this Hearthboard. This cannot be undone.
+                  </Alert>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={backupImporting ? <CircularProgress size={16} color="inherit" /> : <RestartAlt />}
+                    onClick={() => setImportConfirmOpen(true)}
+                    disabled={backupImporting || (importFileData.encrypted && !importPassphrase)}
+                  >
+                    {backupImporting ? 'Importing…' : 'Import Configuration'}
+                  </Button>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog open={importConfirmOpen} onClose={() => setImportConfirmOpen(false)} maxWidth="sm" fullWidth>
+            <DialogTitle>Replace all configuration?</DialogTitle>
+            <DialogContent>
+              <Typography variant="body2">
+                All current settings, devices, tabs, widget layouts, users, chores, schedules, history, and calendar
+                and photo sources on this server will be deleted and replaced with the contents
+                of <strong>{importFileName}</strong>. This cannot be undone.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setImportConfirmOpen(false)}>Cancel</Button>
+              <Button color="error" variant="contained" onClick={handleImportConfig}>
+                Replace Configuration
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </Box>
+      )}
+
+      {activeTab === 7 && (
         <Card>
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>

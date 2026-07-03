@@ -65,7 +65,7 @@ const googleCalendar = require('./services/googleCalendar');
 const appleCalDAV = require('./services/appleCalDAV');
 const googlePhotos = require('./services/googlePhotos');
 const googlePhotosPicker = require('./services/googlePhotosPicker');
-const { isEncryptionConfigured, getEncryptionStatus } = require('./utils/encryption');
+const { encrypt: encryptWithServerKey, decrypt: decryptWithServerKey, isEncryptionConfigured, getEncryptionStatus } = require('./utils/encryption');
 let calendarSyncService = null;
 
 const initializeDatabase = require('./migrations/initializeDatabase');
@@ -2228,6 +2228,239 @@ fastify.post('/api/settings', async (request, reply) => {
   } catch (error) {
     console.error(`Error saving setting '${key}':`, error);
     reply.status(500).send({ error: `Failed to save setting '${key}'` });
+  }
+});
+
+// Configuration backup: export/import the whole Hearthboard configuration so a
+// deployment can be recreated on another machine. Secrets stored with this
+// server's ENCRYPTION_KEY are decrypted on export (optionally protected by a
+// user passphrase) and re-encrypted with the target server's key on import.
+const CONFIG_EXPORT_TYPE = 'hearthboard-config-export';
+const CONFIG_EXPORT_VERSION = 1;
+
+// Ordered parent-first so inserts satisfy foreign keys; deletes run in reverse.
+const CONFIG_EXPORT_TABLES = [
+  'users',
+  'chores',
+  'chore_schedules',
+  'chore_history',
+  'events',
+  'devices',
+  'tabs',
+  'calendar_sources',
+  'calendar_sync_status',
+  'photo_sources',
+  'settings',
+  'admin_pin',
+];
+
+const PHOTO_SOURCE_SECRET_COLUMNS = ['api_key', 'password', 'refresh_token'];
+
+// Schema/migration bookkeeping describes this database, not user
+// configuration. It is excluded from exports and preserved on import so a
+// file from an older Hearthboard cannot roll back the schema version.
+const MIGRATION_SETTING_KEYS = new Set([
+  SYSTEM_SCHEMA_ID_KEY,
+  'chores_migration_version',
+  'duration_migration_version',
+]);
+
+function getTableColumns(tableName) {
+  return db.prepare(`PRAGMA table_info(${tableName})`).all().map((column) => column.name);
+}
+
+function toSqliteValue(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  if (typeof value === 'object') return JSON.stringify(value);
+  return value;
+}
+
+function collectConfigExportData() {
+  const data = {};
+  for (const table of CONFIG_EXPORT_TABLES) {
+    if (!doesTableExist(table)) continue;
+    data[table] = db.prepare(`SELECT * FROM ${table}`).all();
+  }
+  data.settings = (data.settings || []).filter((row) => !MIGRATION_SETTING_KEYS.has(row.key));
+
+  for (const row of data.calendar_sources || []) {
+    row.password = row.password ? decryptPassword(row.password) : null;
+  }
+  for (const row of data.photo_sources || []) {
+    for (const column of PHOTO_SOURCE_SECRET_COLUMNS) {
+      row[column] = row[column] ? decryptPassword(row[column]) : null;
+    }
+    // Picker sessions are short-lived and tied to this deployment.
+    row.picker_session_id = null;
+    row.picker_session_expire = null;
+  }
+
+  // The Home Assistant token is encrypted with this server's key file, which
+  // the target machine will not have. Export it as the plain-key variant the
+  // service already supports; import re-encrypts it with the local key.
+  const settingsRows = data.settings || [];
+  const haTokenRow = settingsRows.find((row) => row.key === 'HA_TOKEN_ENC');
+  if (haTokenRow) {
+    try {
+      const plainToken = decryptWithServerKey(haTokenRow.value);
+      data.settings = settingsRows.filter((row) => row.key !== 'HA_TOKEN_ENC' && row.key !== 'HA_TOKEN_PLAIN');
+      if (plainToken) {
+        data.settings.push({ key: 'HA_TOKEN_PLAIN', value: plainToken });
+      }
+    } catch (error) {
+      console.error('Could not decrypt Home Assistant token for export; leaving it out:', error.message);
+      data.settings = settingsRows.filter((row) => row.key !== 'HA_TOKEN_ENC');
+    }
+  }
+
+  return data;
+}
+
+function encryptConfigPayload(plainText, passphrase) {
+  const salt = crypto.randomBytes(16);
+  const key = crypto.scryptSync(passphrase, salt, 32);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
+  return {
+    kdf: 'scrypt',
+    salt: salt.toString('base64'),
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    payload: encrypted.toString('base64'),
+  };
+}
+
+function decryptConfigPayload(file, passphrase) {
+  const key = crypto.scryptSync(passphrase, Buffer.from(file.salt, 'base64'), 32);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(file.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(file.tag, 'base64'));
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(file.payload, 'base64')),
+    decipher.final(),
+  ]);
+  return decrypted.toString('utf8');
+}
+
+fastify.post('/api/config/export', async (request, reply) => {
+  const { encrypt = false, passphrase = '' } = request.body || {};
+  if (encrypt && (typeof passphrase !== 'string' || passphrase.length < 4)) {
+    return reply.status(400).send({ error: 'A passphrase of at least 4 characters is required to encrypt the export.' });
+  }
+  try {
+    const envelope = {
+      type: CONFIG_EXPORT_TYPE,
+      version: CONFIG_EXPORT_VERSION,
+      exported_at: new Date().toISOString(),
+      encrypted: Boolean(encrypt),
+    };
+    const data = collectConfigExportData();
+    if (encrypt) {
+      Object.assign(envelope, encryptConfigPayload(JSON.stringify(data), passphrase));
+    } else {
+      envelope.data = data;
+    }
+    return envelope;
+  } catch (error) {
+    console.error('Error exporting configuration:', error);
+    reply.status(500).send({ error: 'Failed to export configuration' });
+  }
+});
+
+fastify.post('/api/config/import', { bodyLimit: 25 * 1024 * 1024 }, async (request, reply) => {
+  const { file, passphrase = '' } = request.body || {};
+  if (!file || typeof file !== 'object' || file.type !== CONFIG_EXPORT_TYPE) {
+    return reply.status(400).send({ error: 'Not a valid Hearthboard configuration export file.' });
+  }
+  if (typeof file.version === 'number' && file.version > CONFIG_EXPORT_VERSION) {
+    return reply.status(400).send({ error: `This export was created by a newer Hearthboard version (file version ${file.version}). Update this server first.` });
+  }
+
+  let data;
+  if (file.encrypted) {
+    if (!passphrase) {
+      return reply.status(400).send({ error: 'This export is encrypted. A passphrase is required.' });
+    }
+    try {
+      data = JSON.parse(decryptConfigPayload(file, passphrase));
+    } catch (error) {
+      return reply.status(400).send({ error: 'Could not decrypt the export file. Check the passphrase.' });
+    }
+  } else {
+    data = file.data;
+  }
+  if (!data || typeof data !== 'object' || !Array.isArray(data.settings)) {
+    return reply.status(400).send({ error: 'The export file contains no configuration data.' });
+  }
+
+  try {
+    const importAll = db.transaction(() => {
+      // Cached calendar events are rebuilt by the next sync; clear them before
+      // their parent sources are replaced.
+      if (doesTableExist('calendar_events_cache')) {
+        db.prepare('DELETE FROM calendar_events_cache').run();
+      }
+      const migrationKeys = [...MIGRATION_SETTING_KEYS];
+      const migrationKeyPlaceholders = migrationKeys.map(() => '?').join(', ');
+      for (const table of [...CONFIG_EXPORT_TABLES].reverse()) {
+        if (!doesTableExist(table)) continue;
+        if (table === 'settings') {
+          db.prepare(`DELETE FROM settings WHERE key NOT IN (${migrationKeyPlaceholders})`).run(...migrationKeys);
+        } else {
+          db.prepare(`DELETE FROM ${table}`).run();
+        }
+      }
+
+      const counts = {};
+      for (const table of CONFIG_EXPORT_TABLES) {
+        counts[table] = 0;
+        const rows = Array.isArray(data[table]) ? data[table] : [];
+        if (!rows.length || !doesTableExist(table)) continue;
+
+        const columns = getTableColumns(table);
+        for (const row of rows) {
+          if (!row || typeof row !== 'object') continue;
+          if (table === 'settings' && MIGRATION_SETTING_KEYS.has(row.key)) continue;
+          const rowCopy = { ...row };
+          if (table === 'calendar_sources' && rowCopy.password) {
+            rowCopy.password = encryptPassword(rowCopy.password);
+          }
+          if (table === 'photo_sources') {
+            for (const column of PHOTO_SOURCE_SECRET_COLUMNS) {
+              if (rowCopy[column]) rowCopy[column] = encryptPassword(rowCopy[column]);
+            }
+          }
+          if (table === 'settings' && rowCopy.key === 'HA_TOKEN_PLAIN' && isEncryptionConfigured()) {
+            rowCopy.key = 'HA_TOKEN_ENC';
+            rowCopy.value = encryptWithServerKey(rowCopy.value);
+          }
+          const usableColumns = columns.filter((column) => rowCopy[column] !== undefined);
+          if (!usableColumns.length) continue;
+          const placeholders = usableColumns.map(() => '?').join(', ');
+          db.prepare(`INSERT INTO ${table} (${usableColumns.join(', ')}) VALUES (${placeholders})`)
+            .run(...usableColumns.map((column) => toSqliteValue(rowCopy[column])));
+          counts[table] += 1;
+        }
+      }
+      db.prepare('UPDATE devices SET updateTime = CURRENT_TIMESTAMP').run();
+      return counts;
+    });
+    const counts = importAll();
+
+    if (calendarSyncService) {
+      try {
+        calendarSyncService.stopAllSyncJobs();
+        calendarSyncService.startAllSyncJobs();
+      } catch (error) {
+        console.error('Error restarting calendar sync after import:', error);
+      }
+    }
+
+    return { success: true, counts };
+  } catch (error) {
+    console.error('Error importing configuration:', error);
+    reply.status(500).send({ error: 'Failed to import configuration', details: error.message });
   }
 });
 
