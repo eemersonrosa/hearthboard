@@ -12,7 +12,9 @@ function createLocalStorageMock() {
 }
 
 describe('deviceName utilities', () => {
-    const originalLocalStorage = globalThis.localStorage;
+    // Node 25's built-in localStorage getter throws unless started with
+    // --localstorage-file, so capture the descriptor instead of the value.
+    const originalLocalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 
     beforeEach(() => {
         Object.defineProperty(globalThis, 'localStorage', {
@@ -23,11 +25,11 @@ describe('deviceName utilities', () => {
     });
 
     afterEach(() => {
-        Object.defineProperty(globalThis, 'localStorage', {
-            value: originalLocalStorage,
-            configurable: true,
-            writable: true,
-        });
+        if (originalLocalStorageDescriptor) {
+            Object.defineProperty(globalThis, 'localStorage', originalLocalStorageDescriptor);
+        } else {
+            delete globalThis.localStorage;
+        }
         vi.restoreAllMocks();
     });
 

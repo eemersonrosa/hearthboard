@@ -320,7 +320,7 @@ const TabBar = ({
                   }}
                 >
                   <img
-                    src="/HearthboardLogo.png"
+                    src="/HearthboardLogo.svg"
                     alt="Hearthboard"
                     style={{
                       height: '32px',

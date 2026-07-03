@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="hb-tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1e2436"/>
+      <stop offset="1" stop-color="#10141f"/>
+    </linearGradient>
+    <linearGradient id="hb-flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#f97316"/>
+      <stop offset="0.6" stop-color="#fb923c"/>
+      <stop offset="1" stop-color="#fbbf24"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#hb-tile)" stroke="#3b445c" stroke-width="1.5"/>
+  <!-- roofline -->
+  <path d="M14 30 L32 14 L50 30" fill="none" stroke="#8b95ad" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- flame -->
+  <path d="M32 22 C32 30 24 33 24 41 C24 47.5 27.6 51 32 51 C36.4 51 40 47.5 40 41 C40 36.5 37 34 36 30 C34.8 33 33 33.5 33 30 C33 27 32 24.5 32 22 Z" fill="url(#hb-flame)"/>
+  <!-- inner flame -->
+  <path d="M32 38 C32 42 29 43 29 46 C29 48.6 30.4 50 32 50 C33.6 50 35 48.6 35 46 C35 43 32 42 32 38 Z" fill="#fef3c7"/>
+</svg>
