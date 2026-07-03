@@ -85,7 +85,7 @@ const DEFAULT_SCREENSAVER_SETTINGS = {
 };
 
 const DEFAULT_DOCK_SETTINGS = {
-  autoHide: false,
+  autoHide: true,
   autoHideDelay: 10,
 };
 
@@ -1082,7 +1082,8 @@ const App = () => {
   return (
     <>
       <HAAlertsBar />
-      <Box sx={{ width: '100%', minHeight: '100vh', position: 'relative', pb: { xs: '80px', sm: 0 }, pr: { xs: 0, sm: '76px' } }}>
+      {/* No right gutter for the dock: it floats above the widgets and auto-hides. */}
+      <Box sx={{ width: '100%', minHeight: '100vh', position: 'relative', pb: { xs: '80px', sm: 0 } }}>
         {isMobile ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 1.5 }}>
             {mobileWidgets.map((widget) => (

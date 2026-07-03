@@ -89,7 +89,7 @@ const INTERFACE_SCREENSAVER_STORAGE_KEY = 'screensaverSettings';
 const DOCK_SETTINGS_STORAGE_KEY = 'dockSettings';
 
 const DEFAULT_DOCK_SETTINGS = {
-  autoHide: false,
+  autoHide: true,
   autoHideDelay: 10,
 };
 

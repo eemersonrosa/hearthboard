@@ -235,7 +235,7 @@ const TabBar = ({
   theme,
   themeMode,
   screensaverCountdown,
-  autoHide = false,
+  autoHide = true,
   autoHideDelay = 10,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -257,7 +257,13 @@ const TabBar = ({
   const armIdleTimer = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     idleTimerRef.current = setTimeout(() => {
-      if (!menuOpenRef.current) setMinimized(true);
+      if (menuOpenRef.current) {
+        // Don't hide under an open menu, but keep the schedule alive so the
+        // dock still hides once the menu closes, even with no further input.
+        armIdleTimer();
+        return;
+      }
+      setMinimized(true);
     }, Math.max(3, autoHideDelay) * 1000);
   }, [autoHideDelay]);
 
