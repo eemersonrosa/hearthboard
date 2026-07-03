@@ -28,3 +28,7 @@ server/data/*.db-shm
 
 # Generated encryption key (secret, do not commit)
 server/data/.encryption-key
+
+# Docker-mounted runtime data for local deployments (DB, uploads)
+hearthboard/
+hearthboarddev/
