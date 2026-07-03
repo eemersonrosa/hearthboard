@@ -56,7 +56,7 @@ custom properties.
 | --- | --- |
 | `CalendarWidget.jsx` (largest) | Month/week calendar via `react-big-calendar`; multi-source, multi-day & all-day events; reads cached events from the backend. |
 | `WeatherWidget.jsx` | Current conditions + 3-day forecast with temperature/precipitation graphs (`recharts`); talks to OpenWeatherMap. |
-| `ChoreWidget.jsx` | Per-user daily chores, swipe-to-complete, clam progress and rewards. |
+| `ChoreWidget.jsx` | Per-user daily chores, complete/undo, reassignment, bonus chore pool. |
 | `PhotoWidget.jsx` | Slideshow from configured photo sources (Immich, Google Photos, uploads). |
 | `PluginWidgetWrapper.jsx` | Renders a custom/plugin widget in a sandboxed `<iframe>` served from `/widgets/:filename`, passing the theme via query param. |
 | `MonthDayCell.jsx` | Custom day cell renderer for the calendar. |
@@ -65,7 +65,7 @@ custom properties.
 ### Admin & configuration
 | Component | Role |
 | --- | --- |
-| `AdminPanel.jsx` (largest file) | The settings hub: APIs, widget enable/refresh, users, chores, prizes, calendar & photo sources, plugins, interface colors, screensaver. |
+| `AdminPanel.jsx` (largest file) | The settings hub (sidebar layout): widgets & plugins, interface (colors, screensaver, dock), users, chores, security PIN, connections (weather, Google, Home Assistant), about. |
 | `ChoreSchedulesTab.jsx` | Manage chores and their recurring schedules (cron/duration/interval). |
 | `ChoreHistoryTab.jsx` | View/delete recent chore completions. |
 | `GoogleAccountConnection.jsx` | Google OAuth linking UI (calendar/photos). |

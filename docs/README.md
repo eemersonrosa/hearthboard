@@ -25,7 +25,7 @@ stays relevant.
 - [Frontend Reference](reference/frontend.md) — React component map, state, and data flow.
 
 ### Feature deep-dives
-- [Features & Domains](reference/features.md) — chores/clams, calendar sync, photos, screensaver, theming, tabs & layout.
+- [Features & Domains](reference/features.md) — chores, calendar sync, photos, Home Assistant, screensaver, theming, tabs & layout.
 
 ### Guides
 - [Getting Started (Local Dev)](guides/getting-started.md)

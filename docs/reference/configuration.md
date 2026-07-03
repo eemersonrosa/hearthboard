@@ -54,9 +54,8 @@ Open with the gear (⚙️) icon. These persist server-side (global settings in 
 | --- | --- | --- |
 | **APIs** | OpenWeatherMap API key, ICS calendar URL | `settings` (global) |
 | **Widgets** | Enable/disable built-ins, per-widget auto-refresh interval, transparency | `devices.device_settings_json` (per device) |
-| **Users** | Family members, avatars, clam adjustments | `users`, `chore_history` |
+| **Users** | Family members (name + avatar only) | `users`, `chore_history` |
 | **Chores** | Chore definitions, schedules (cron/duration/interval), history | `chores`, `chore_schedules`, `chore_history` |
-| **Prizes** | Clam-purchasable rewards | `prizes` |
 | **Calendar** | ICS/CalDAV/Google sources, colors, sync intervals | `calendar_sources`, `calendar_sync_status` |
 | **Photos** | Immich/Google/upload sources | `photo_sources`, media tables |
 | **Connections** | Google OAuth linking | `google_accounts` |

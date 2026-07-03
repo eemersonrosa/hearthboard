@@ -119,32 +119,33 @@ segment (the browser's `localStorage` UUID).
 | POST | `/api/chore-schedules/bulk` | Bulk create schedules. |
 | GET/POST | `/api/chore-history` | Query / add history entries. |
 | GET | `/api/chore-history/user/:userId` | History for a user. |
-| GET | `/api/chore-history/summary/:userId` | Summary/aggregate for a user. |
 | GET | `/api/chore-history/recent` | Recent (last 7 days) completions. |
 | DELETE | `/api/chore-history/:id` | Delete a history entry. |
-| POST | `/api/chores/complete` | Mark a chore complete (awards clams / daily bonus). |
+| POST | `/api/chores/complete` | Mark a chore complete (409 if already completed that day). |
 | POST | `/api/chores/uncomplete` | Undo a completion. |
 
-### Users & clams
+### Users
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET/POST | `/api/users` | List / create users. |
+| GET/POST | `/api/users` | List / create users. Users are `{ id, username, profile_picture }` — name only, no email. |
 | PATCH/DELETE | `/api/users/:id` | Update / delete a user. |
 | POST | `/api/users/:id/upload-picture` | Upload an avatar. |
-| GET | `/api/users/:id/clams` | Current clam balance. |
-| POST | `/api/users/:id/clams/add` | Add clams (admin adjustment). |
-| POST | `/api/users/:id/clams/reduce` | Reduce clams (e.g. prize purchase). |
 
-### Prizes
+### Home Assistant
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET/POST | `/api/prizes` | List / create prizes. |
-| PATCH/DELETE | `/api/prizes/:id` | Update / delete a prize. |
+| GET | `/api/homeassistant/status` | Config status; add `?test=1` to test the connection. |
+| POST | `/api/homeassistant/config` | Save `base_url`, `token` (encrypted at rest when possible), `weather_entity`. |
+| GET | `/api/homeassistant/entities` | Proxy of HA states; filter with `?domains=light,switch`. |
+| POST | `/api/homeassistant/service` | Call an HA service (`domain`, `service`, `entity_id`, `data`); system domains blocked. |
+| GET | `/api/homeassistant/weather` | HA weather entity mapped to the weather widget payload (`?unit=F\|C`). |
+| GET/PUT | `/api/homeassistant/alert-rules` | Read / replace the alert rules list. |
+| GET | `/api/homeassistant/alerts` | Currently-firing alerts evaluated against HA states. |
 
 ### Settings & API keys
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET/POST | `/api/settings` | Read / write global settings (weather key, ICS URL). |
+| GET/POST | `/api/settings` | Read / write global settings (weather key, weather source, ICS URL). Home Assistant token keys are never returned. |
 | POST | `/api/settings/search` | Look up specific settings. |
 | POST | `/api/test-api-key` | Validate an OpenWeatherMap key. |
 | GET | `/api/proxy` | Generic CORS proxy (used by widgets/integrations). |

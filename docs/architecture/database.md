@@ -21,9 +21,8 @@ They create the original tables and perform one-off data reshaping:
 
 | Module | Purpose |
 | --- | --- |
-| [`initializeDatabase.js`](../../server/migrations/initializeDatabase.js) | Creates the base tables (`chores`, `users`, `events`, `settings`, `prizes`, `calendar_sources`, `photo_sources`, `admin_pin`, and the original `tabs`/`widget_tab_assignments`). Seeds the `bonus` user (id 0). |
+| [`initializeDatabase.js`](../../server/migrations/initializeDatabase.js) | Creates the base tables (`chores`, `users`, `events`, `settings`, `calendar_sources`, `photo_sources`, `admin_pin`, and the original `tabs`/`widget_tab_assignments`). |
 | [`migrateChoresDatabase.js`](../../server/migrations/migrateChoresDatabase.js) | Introduces the three-table chore model (`chore_schedules`, `chore_history`) and converts old repeat types to cron expressions. |
-| [`migrateClamsToHistory.js`](../../server/migrations/migrateClamsToHistory.js) | Moves the denormalized clam total off `users` into `chore_history` rows. |
 | [`migrateChoreHistoryTitle.js`](../../server/migrations/migrateChoreHistoryTitle.js) | Backfills chore title info on history rows. |
 | [`migrateToDurationField.js`](../../server/migrations/migrateToDurationField.js) | Adds the `duration` concept to schedules. |
 
@@ -61,9 +60,10 @@ starting point — see [Contributing → adding a migration](../guides/contribut
 
 **`chores`** — the definition of a task.
 ```
-id, user_id, title, description, time_period, assigned_day_of_week,
-repeat_type, completed, clam_value (default 0), expiration_date
+id, title, description, is_bonus (default 0)
 ```
+`is_bonus = 1` marks an "up for grabs" extra chore: it can sit unassigned, and
+the daily background job resets completed bonus chores back to unassigned.
 
 **`chore_schedules`** — when/for whom a chore recurs.
 ```
@@ -76,22 +76,17 @@ parent_schedule_id ─▶ chore_schedules(id),   -- links generated instances to
 visible, created_at
 ```
 
-**`chore_history`** — completion / clam ledger (source of truth for balances).
+**`chore_history`** — completion log.
 ```
 id, user_id, chore_schedule_id ─▶ chore_schedules(id) ON DELETE SET NULL,
-date, clam_value, created_at
+date, title, created_at
 ```
 
-### Users, prizes, settings
+### Users & settings
 
-**`users`** — family members. Row `id = 0` is the seeded `bonus` pseudo-user.
+**`users`** — family members. Name only; no email.
 ```
-id, username, email, profile_picture
-```
-
-**`prizes`** — rewards purchasable with clams.
-```
-id, name, clam_cost
+id, username, profile_picture
 ```
 
 **`settings`** — global key/value store (API keys, `SYSTEM_SCHEMA_ID`, migration flags).

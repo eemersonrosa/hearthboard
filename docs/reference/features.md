@@ -29,11 +29,11 @@ code, so you know where to look when working on a given domain.
 **Code:** theme logic in `app.jsx`, colors in `index.css`,
 `ColorPickerPopover.jsx`, `colorContrast.js`.
 
-## Chores & the clam reward system
+## Chores
 
 The chore system uses a **three-table model** (see [Database](../architecture/database.md)):
 `chores` (definitions) → `chore_schedules` (recurrence + assignment) →
-`chore_history` (completion/clam ledger).
+`chore_history` (completion log).
 
 - **Recurrence** is expressed as cron (`crontab`). A `NULL` crontab means a
   one-time instance.
@@ -43,15 +43,32 @@ The chore system uses a **three-table model** (see [Database](../architecture/da
   - `once-completed` — sticky, and recurs again after an `interval` (e.g. `3m`).
 - **Sticky chores** are materialized nightly: the background job creates one-time
   child schedules (`parent_schedule_id`) when a recurring sticky schedule fires.
-- **Clams** are a reward currency earned by completing chores; balances are derived
-  by summing `chore_history` (no denormalized total). Completing *all* of a user's
-  daily chores awards a bonus. **Bonus chores** carry a custom clam value and reset
-  to unassigned each night; only one uncompleted bonus chore per user at a time.
-- **Prizes** can be "bought" with clams (`/api/prizes`, `clams/reduce`).
+- **Reassignment**: a chore can be moved to another person straight from the
+  dashboard (swap button on the chore row).
+- **Bonus chores** (`is_bonus`) are unassigned extras anyone can claim; they
+  reset to unassigned each night. There is no points or prize system —
+  completion tracking only.
 
 **Code:** `ChoreWidget.jsx`, `ChoreSchedulesTab.jsx`, `ChoreHistoryTab.jsx`,
 `utils/choreHelpers.js`; backend chore routes + `dailyBackgroundProcessing()` in
 `server/index.js`.
+
+## Home Assistant
+
+- **Panel widget** (`HomeAssistantWidget.jsx`): searchable entity list with
+  starred favorites (persisted per device profile); toggles for lights,
+  switches, fans, covers, locks, scenes, and scripts via a server-side proxy.
+- **Weather source**: the weather widget can use an HA weather entity instead
+  of OpenWeatherMap (Admin → Widgets → Weather → Weather Source). The server
+  maps HA conditions/forecast onto the OpenWeatherMap payload shape.
+- **Alerts** (`HAAlertsBar.jsx`): rules configured in Admin → Connections are
+  evaluated server-side ("state equals" or "state held for N minutes") and
+  shown as banners on all displays.
+- Config lives in Admin → Connections; the access token is encrypted at rest
+  when `ENCRYPTION_KEY` is set and is never exposed via `/api/settings`.
+
+**Code:** `server/services/homeAssistant.js`, HA routes in `server/index.js`,
+`HomeAssistantWidget.jsx`, `HAAlertsBar.jsx`, `HomeAssistantConnection.jsx`.
 
 ## Calendar
 
