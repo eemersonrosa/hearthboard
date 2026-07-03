@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box } from '@mui/material';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
+import { isScreenOn } from '../utils/useScheduledRefresh.js';
 
 const CountdownCircle = ({ refreshInterval, onRefresh }) => {
   const [progress, setProgress] = useState(0);
@@ -14,7 +15,14 @@ const CountdownCircle = ({ refreshInterval, onRefresh }) => {
 
     const startTime = Date.now();
 
+    // Progress derives from a start timestamp, so nothing is "lost" while
+    // the screen is off; refreshes simply don't fire until the screen is
+    // back on, at which point an overdue cycle fires immediately.
     const updateProgress = () => {
+      if (!isScreenOn()) {
+        return;
+      }
+
       const elapsed = Date.now() - startTime;
       const progressPercent = (elapsed / refreshInterval) * 100;
 
@@ -30,9 +38,11 @@ const CountdownCircle = ({ refreshInterval, onRefresh }) => {
 
     updateProgress();
     const intervalId = setInterval(updateProgress, 100);
+    document.addEventListener('visibilitychange', updateProgress);
 
     return () => {
       clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', updateProgress);
     };
   }, [refreshInterval, onRefresh, cycleKey]);
 

@@ -3,6 +3,7 @@ import { Typography, Box, IconButton, Popover, Dialog, DialogTitle, DialogConten
 import { Settings, Add, Delete, Edit, Refresh, ChevronLeft, ChevronRight, PlayArrow, Pause, CloudUpload } from '@mui/icons-material';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/apiConfig.js';
+import useScheduledRefresh from '../utils/useScheduledRefresh.js';
 
 const PhotoWidget = ({ transparentBackground, refreshInterval = 0 }) => {
   const [photos, setPhotos] = useState([]);
@@ -66,33 +67,15 @@ const PhotoWidget = ({ transparentBackground, refreshInterval = 0 }) => {
     }
   };
 
-  // Auto-refresh functionality
-  useEffect(() => {
-    if (refreshInterval > 0) {
-      console.log(`PhotoWidget: Auto-refresh enabled (${refreshInterval}ms)`);
+  // Auto-refresh: timestamp-scheduled, paused while the screen is off.
+  useScheduledRefresh(refreshInterval, fetchPhotos);
 
-      const intervalId = setInterval(() => {
-        console.log('PhotoWidget: Auto-refreshing data...');
-        fetchPhotos();
-      }, refreshInterval);
-
-      return () => {
-        console.log('PhotoWidget: Clearing auto-refresh interval');
-        clearInterval(intervalId);
-      };
-    }
-  }, [refreshInterval]);
-
-  // Slideshow timer
-  useEffect(() => {
-    if (!isPlaying || photos.length <= photosPerView) return;
-
-    const timer = setInterval(() => {
-      setCurrentPhotoIndex((prev) => (prev + photosPerView) % photos.length);
-    }, slideshowInterval);
-
-    return () => clearInterval(timer);
-  }, [isPlaying, photos.length, slideshowInterval, currentPhotoIndex, photosPerView]);
+  // Slideshow timer, also paused while the screen is off.
+  useScheduledRefresh(
+    slideshowInterval,
+    () => setCurrentPhotoIndex((prev) => (prev + photosPerView) % photos.length),
+    isPlaying && photos.length > photosPerView,
+  );
 
   const fetchPhotoSources = async () => {
     try {

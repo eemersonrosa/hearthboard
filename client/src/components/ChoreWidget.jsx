@@ -28,6 +28,7 @@ import { Edit, Save, Cancel, Add, Delete, Check, Undo, SwapHoriz } from '@mui/ic
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/apiConfig.js';
 import { getDeviceApiBase } from '../utils/deviceName.js';
+import useScheduledRefresh from '../utils/useScheduledRefresh.js';
 import { shouldShowChoreToday, getTodayDateString, convertDaysToCrontab } from '../utils/choreHelpers.js';
 
 const USERS_UPDATED_EVENT = 'hearthboard:users-updated';
@@ -78,21 +79,7 @@ const ChoreWidget = ({ transparentBackground, refreshInterval = 0 }) => {
     void loadDeviceWidgetSettings();
   }, [API_DEVICE_URL]);
 
-  useEffect(() => {
-    if (refreshInterval > 0) {
-      console.log(`ChoreWidget: Auto-refresh enabled (${refreshInterval}ms)`);
-
-      const intervalId = setInterval(() => {
-        console.log('ChoreWidget: Auto-refreshing data...');
-        fetchData();
-      }, refreshInterval);
-
-      return () => {
-        console.log('ChoreWidget: Clearing auto-refresh interval');
-        clearInterval(intervalId);
-      };
-    }
-  }, [refreshInterval]);
+  useScheduledRefresh(refreshInterval, fetchData);
 
   useEffect(() => {
     if (!deviceSettingsLoaded) {

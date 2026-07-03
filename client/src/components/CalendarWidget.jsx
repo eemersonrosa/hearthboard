@@ -6,6 +6,7 @@ import moment from 'moment';
 import { SketchPicker } from 'react-color';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/apiConfig.js';
+import useScheduledRefresh from '../utils/useScheduledRefresh.js';
 import { getDeviceApiBase } from '../utils/deviceName.js';
 import { getEventPillPalette, getPreferredColorMode } from '../utils/colorContrast.js';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -197,23 +198,11 @@ const CalendarWidget = ({
     fetchSyncStatus();
   }, []);
 
-  // Auto-refresh functionality
-  useEffect(() => {
-    if (refreshInterval > 0) {
-      console.log(`CalendarWidget: Auto-refresh enabled (${refreshInterval}ms)`);
-
-      const intervalId = setInterval(() => {
-        console.log('CalendarWidget: Auto-refreshing data...');
-        fetchCalendarSources();
-        fetchCalendarEvents();
-      }, refreshInterval);
-
-      return () => {
-        console.log('CalendarWidget: Clearing auto-refresh interval');
-        clearInterval(intervalId);
-      };
-    }
-  }, [refreshInterval]);
+  // Auto-refresh: timestamp-scheduled, paused while the screen is off.
+  useScheduledRefresh(refreshInterval, () => {
+    fetchCalendarSources();
+    fetchCalendarEvents();
+  });
 
   useEffect(() => {
     const loadCalendarWidgetSettings = async () => {

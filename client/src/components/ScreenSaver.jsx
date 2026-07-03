@@ -3,6 +3,7 @@ import { Box, IconButton, Typography } from '@mui/material';
 import { Close, ChevronLeft, ChevronRight } from '@mui/icons-material';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/apiConfig.js';
+import useScheduledRefresh from '../utils/useScheduledRefresh.js';
 
 const ScreenSaver = ({ mode, slideshowInterval, tabs, onExit, onTabChange }) => {
   const [photos, setPhotos] = useState([]);
@@ -35,10 +36,11 @@ const ScreenSaver = ({ mode, slideshowInterval, tabs, onExit, onTabChange }) => 
     }
   };
 
-  useEffect(() => {
-    if (loading) return;
-
-    const interval = setInterval(() => {
+  // Cycle photos/tabs on a timestamp schedule so the screensaver stops
+  // fetching photos and switching tabs while the screen is off.
+  useScheduledRefresh(
+    slideshowInterval * 1000,
+    () => {
       if (mode === 'photos' && photos.length > 0) {
         setCurrentIndex(prev => (prev + 1) % photos.length);
       } else if (mode === 'tabs' && tabs.length > 0) {
@@ -50,10 +52,9 @@ const ScreenSaver = ({ mode, slideshowInterval, tabs, onExit, onTabChange }) => 
           return nextIndex;
         });
       }
-    }, slideshowInterval * 1000);
-
-    return () => clearInterval(interval);
-  }, [mode, photos.length, tabs, slideshowInterval, loading, onTabChange]);
+    },
+    !loading,
+  );
 
   useEffect(() => {
     if ('wakeLock' in navigator) {

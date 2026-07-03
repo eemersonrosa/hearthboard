@@ -18,6 +18,7 @@ import { Settings } from '@mui/icons-material';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/apiConfig.js';
+import useScheduledRefresh from '../utils/useScheduledRefresh.js';
 import { getDeviceApiBase } from '../utils/deviceName.js';
 
 const DEFAULT_LOCATION_QUERY = '14818';
@@ -52,6 +53,7 @@ const WeatherWidget = ({
   prefetchOnly = false,
   refreshNonce = 0,
 }) => {
+  const prefetchRef = React.useRef(null);
   const API_DEVICE_URL = getDeviceApiBase(API_BASE_URL);
   const [weatherData, setWeatherData] = useState(null);
   const [forecastData, setForecastData] = useState([]);
@@ -621,33 +623,27 @@ const WeatherWidget = ({
       }));
     };
 
+    prefetchRef.current = prefetchAllTargets;
     void prefetchAllTargets();
 
-    const intervalMs = refreshInterval > 0 ? refreshInterval : WEATHER_CACHE_FALLBACK_REFRESH_MS;
-    const intervalId = setInterval(() => {
-      void prefetchAllTargets();
-    }, intervalMs);
-
     return () => {
-      clearInterval(intervalId);
+      if (prefetchRef.current === prefetchAllTargets) {
+        prefetchRef.current = null;
+      }
     };
   }, [allTabConfigs, activeTab, activeTabConfigJson, prefetchOnly, locationQuery, tempUnit, layoutMode, settingsLoaded, weatherApiKey, refreshInterval]);
 
-  useEffect(() => {
-    if (!settingsLoaded) {
-      return;
-    }
+  useScheduledRefresh(
+    refreshInterval > 0 ? refreshInterval : WEATHER_CACHE_FALLBACK_REFRESH_MS,
+    () => { void prefetchRef.current?.(); },
+    settingsLoaded && !!weatherApiKey,
+  );
 
-    if (refreshInterval > 0) {
-      const intervalId = setInterval(() => {
-        void refreshCurrentWeather();
-      }, refreshInterval);
-
-      return () => {
-        clearInterval(intervalId);
-      };
-    }
-  }, [refreshInterval, settingsLoaded, weatherApiKey, locationQuery, tempUnit]);
+  useScheduledRefresh(
+    refreshInterval,
+    () => { void refreshCurrentWeather(); },
+    settingsLoaded,
+  );
 
   const fetchWeatherData = async () => {
     if (!weatherApiKey) {
