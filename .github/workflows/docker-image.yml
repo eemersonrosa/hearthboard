@@ -1,0 +1,97 @@
+name: Build and Publish Docker Images
+
+on:
+  push:
+    # branches:
+    #   - main
+    #   - Testing
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: frontend
+            context: ./client
+            dockerfile: ./client/Dockerfile
+            image: hearthboard-frontend
+          - name: backend
+            context: ./server
+            dockerfile: ./server/Dockerfile
+            image: hearthboard-backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Compute build metadata
+        id: buildmeta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "app_version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "app_version=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "git_commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "repository=${GITHUB_REPOSITORY}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+# tags options:
+# type=ref,event=branch
+# type=sha,format=short
+# ,enable={{is_default_branch}} # Could be used if we want to auto-publish on default branch
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest-test
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.title=${{ matrix.image }}
+
+      - name: Build and push ${{ matrix.name }} image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VITE_APP_VERSION=${{ steps.buildmeta.outputs.app_version }}
+            VITE_GIT_COMMIT=${{ steps.buildmeta.outputs.git_commit }}
+            VITE_GITHUB_REPOSITORY=${{ steps.buildmeta.outputs.repository }}
+            BACKEND_VERSION=${{ steps.buildmeta.outputs.app_version }}
+            BACKEND_GIT_COMMIT=${{ steps.buildmeta.outputs.git_commit }}
+            BACKEND_GITHUB_REPOSITORY=${{ steps.buildmeta.outputs.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

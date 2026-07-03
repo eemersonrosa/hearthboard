@@ -1,0 +1,59 @@
+# Hearthboard Development Environment
+# Uses separate ports from production for parallel testing
+#
+# Quick Start:
+# Set these environment variables in .env file:
+# DEV_FRONTEND_PORT=3001
+# TZ=America/New_York
+#
+# Deploy via Portainer or run: docker-compose -f docker-compose-dev.yml up -d
+#
+# Rebuild required for code changes: docker-compose -f docker-compose-dev.yml up -d --build
+
+services:
+  backend-test:
+    container_name: backend-test
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      args:
+        - PORT=${DEV_BACKEND_PORT:-5001}
+    ports:
+      - "${DEV_BACKEND_PORT:-5001}:${DEV_BACKEND_PORT:-5001}"
+    volumes:
+      - ./hearthboarddev/data:/app/data
+      - ./hearthboarddev/uploads:/app/uploads
+    environment:
+      - NODE_ENV=development
+      - PORT=${DEV_BACKEND_PORT:-5001}
+      - TZ=${TZ:-America/New_York}
+    networks:
+      - hearthboard-test-network
+    dns:
+      - 1.1.1.1
+    restart: unless-stopped
+
+  frontend-test:
+    container_name: frontend-test
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - FRONTEND_PORT=${DEV_FRONTEND_PORT:-3001}
+        - BACKEND_SERVICE=backend-test
+        - BACKEND_PORT=${DEV_BACKEND_PORT:-5001}
+    ports:
+      - "${DEV_FRONTEND_PORT:-3001}:${DEV_FRONTEND_PORT:-3001}"
+    environment:
+      - FRONTEND_PORT=${DEV_FRONTEND_PORT:-3001}
+      - BACKEND_SERVICE=backend-test
+      - BACKEND_PORT=${DEV_BACKEND_PORT:-5001}
+    depends_on:
+      - backend-test
+    networks:
+      - hearthboard-test-network
+    restart: unless-stopped
+
+networks:
+  hearthboard-test-network:
+    driver: bridge

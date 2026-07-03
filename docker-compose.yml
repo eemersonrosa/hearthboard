@@ -1,0 +1,41 @@
+# Hearthboard Production Deployment
+# Configured for Portainer environment variable injection
+#
+# Set these environment variables in the .env file:
+# # Set the appropriate timezone for your location (https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), e.g: America/New_York
+# TZ=America/New_York
+# FRONTEND_PORT=3000
+
+services:
+  hearthboard-backend:
+    container_name: hearthboard-backend
+    image: ghcr.io/eemersonrosa/hearthboard-backend:latest
+    volumes:
+      - ./hearthboard/data:/app/data
+      - ./hearthboard/uploads:/app/uploads
+    environment:
+      - NODE_ENV=production
+      - PORT=${BACKEND_PORT:-5000}
+      - TZ=${TZ:-America/New_York}
+    networks:
+      - hearthboard-network
+    restart: unless-stopped
+
+  hearthboard-frontend:
+    container_name: hearthboard-frontend
+    image: ghcr.io/eemersonrosa/hearthboard-frontend:latest
+    ports:
+      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
+    environment:
+      - FRONTEND_PORT=${FRONTEND_PORT:-3000}
+      - BACKEND_SERVICE=hearthboard-backend
+      - BACKEND_PORT=${BACKEND_PORT:-5000}
+    depends_on:
+      - hearthboard-backend
+    networks:
+      - hearthboard-network
+    restart: unless-stopped
+
+networks:
+  hearthboard-network:
+    driver: bridge
