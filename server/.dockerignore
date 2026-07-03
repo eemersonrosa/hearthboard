@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+data
+uploads
+tests/.tmp
+*.db
+*.db-shm
+*.db-wal
+.env
