@@ -1,23 +1,22 @@
 const DEVICE_NAME_STORAGE_KEY = 'hearthboard_device_name';
 
-const generateDeviceName = () => {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
-    }
-
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-};
+// Every display uses the single shared profile until it is explicitly
+// personalized (Admin > Widgets > Devices). Personalized displays keep their
+// own tabs, widgets, and settings under their chosen device name.
+export const SHARED_DEVICE_NAME = 'shared';
 
 export const getDeviceName = () => {
     let deviceName = localStorage.getItem(DEVICE_NAME_STORAGE_KEY);
 
     if (!deviceName) {
-        deviceName = generateDeviceName();
+        deviceName = SHARED_DEVICE_NAME;
         localStorage.setItem(DEVICE_NAME_STORAGE_KEY, deviceName);
     }
 
     return deviceName;
 };
+
+export const isSharedProfile = () => getDeviceName() === SHARED_DEVICE_NAME;
 
 export const setDeviceName = (deviceName) => {
     localStorage.setItem(DEVICE_NAME_STORAGE_KEY, deviceName);

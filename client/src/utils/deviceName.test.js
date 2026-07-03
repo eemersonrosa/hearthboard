@@ -33,14 +33,11 @@ describe('deviceName utilities', () => {
         vi.restoreAllMocks();
     });
 
-    it('generates and stores a device name when missing', () => {
-        const randomUuidSpy = vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue('fixed-uuid-123');
-
+    it('defaults to the shared profile when no device name is stored', () => {
         const name = getDeviceName();
 
-        expect(name).toBe('fixed-uuid-123');
-        expect(randomUuidSpy).toHaveBeenCalledTimes(1);
-        expect(globalThis.localStorage.getItem('hearthboard_device_name')).toBe('fixed-uuid-123');
+        expect(name).toBe('shared');
+        expect(globalThis.localStorage.getItem('hearthboard_device_name')).toBe('shared');
     });
 
     it('returns stored device name without generating a new value', () => {

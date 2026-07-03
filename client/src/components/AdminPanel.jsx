@@ -67,7 +67,7 @@ import {
 import ColorPickerPopover from './ColorPickerPopover';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/apiConfig.js';
-import { getDeviceApiBase, getDeviceName, setDeviceName } from '../utils/deviceName.js';
+import { getDeviceName, setDeviceName, SHARED_DEVICE_NAME } from '../utils/deviceName.js';
 import PinModal from './PinModal';
 import ChoreSchedulesTab from './ChoreSchedulesTab';
 import ChoreHistoryTab from './ChoreHistoryTab';
@@ -975,6 +975,40 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const [personalizeName, setPersonalizeName] = useState('');
+
+  const personalizeThisDisplay = async () => {
+    const nextName = personalizeName.trim();
+    if (!nextName || nextName === SHARED_DEVICE_NAME) {
+      setSaveMessage({ show: true, type: 'error', text: 'Choose a device name other than "shared".' });
+      setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      // Start the personal profile from a copy of the shared one, then point
+      // this display at it.
+      await axios.post(`${API_BASE_URL}/api/devices/${encodeURIComponent(nextName)}/copy-from/${encodeURIComponent(SHARED_DEVICE_NAME)}`);
+      setDeviceName(nextName);
+      setSaveMessage({ show: true, type: 'success', text: 'Personal profile created. Reloading…' });
+      setTimeout(() => window.location.reload(), 400);
+    } catch (error) {
+      console.error('Error personalizing display:', error);
+      const errorMessage = error?.response?.data?.error || 'Failed to create the personal profile. Please try again.';
+      setSaveMessage({ show: true, type: 'error', text: errorMessage });
+      setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const revertToSharedProfile = () => {
+    setDeviceName(SHARED_DEVICE_NAME);
+    setSaveMessage({ show: true, type: 'success', text: 'Back on the shared profile. Reloading…' });
+    setTimeout(() => window.location.reload(), 400);
   };
 
   const confirmDeleteDevice = async () => {
@@ -2229,19 +2263,48 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
             {widgetsSubTab === 3 && (
               <>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Manage devices and copy tabs/widget settings between them. Copying will overwrite the current device tabs and widget assignments.
+                  All displays share one profile by default, so tabs and widgets look the same
+                  everywhere. Personalize a display to give it its own layout and settings;
+                  it starts as a copy of the shared profile.
                 </Alert>
 
                 <Box sx={{ mb: 2, p: 2, border: '1px solid var(--card-border)', borderRadius: 1 }}>
                   <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 0.5 }}>
-                    Current Device Name
+                    This display
                   </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    <Chip label="Current" color="primary" size="small" />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                    <Chip
+                      label={currentDeviceName === SHARED_DEVICE_NAME ? 'Shared profile' : 'Personal profile'}
+                      color={currentDeviceName === SHARED_DEVICE_NAME ? 'default' : 'primary'}
+                      size="small"
+                    />
                     <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
                       {currentDeviceName}
                     </Typography>
                   </Box>
+
+                  {currentDeviceName === SHARED_DEVICE_NAME ? (
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <TextField
+                        size="small"
+                        label="New device name (e.g. Kitchen Tablet)"
+                        value={personalizeName}
+                        onChange={(e) => setPersonalizeName(e.target.value)}
+                        sx={{ minWidth: 260 }}
+                      />
+                      <Button
+                        variant="contained"
+                        onClick={personalizeThisDisplay}
+                        disabled={isLoading || !personalizeName.trim()}
+                      >
+                        Personalize this display
+                      </Button>
+                    </Box>
+                  ) : (
+                    <Button variant="outlined" onClick={revertToSharedProfile} disabled={isLoading}>
+                      Switch back to shared profile
+                    </Button>
+                  )}
                 </Box>
 
                 <TableContainer component={Paper}>
@@ -2274,7 +2337,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                               <Chip label={Number(device.widgets) || 0} size="small" />
                             </TableCell>
                             <TableCell>
-                              {isCurrent ? (
+                              {isCurrent && device.name !== SHARED_DEVICE_NAME ? (
                                 <IconButton
                                   onClick={openRenameDeviceDialog}
                                   color="primary"
@@ -2283,7 +2346,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                                 >
                                   <Edit />
                                 </IconButton>
-                              ) : (
+                              ) : isCurrent ? null : (
                                 <IconButton
                                   onClick={() => openCopyDeviceDialog(device)}
                                   color="primary"
@@ -2298,7 +2361,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                                 color="error"
                                 size="small"
                                 title="Delete device"
-                                disabled={isCurrent}
+                                disabled={isCurrent || device.name === SHARED_DEVICE_NAME}
                               >
                                 <Delete />
                               </IconButton>
