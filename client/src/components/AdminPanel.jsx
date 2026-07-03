@@ -62,7 +62,12 @@ import {
   DragIndicator,
   PhotoLibrary,
   Info,
-  OpenInNew
+  OpenInNew,
+  Dashboard,
+  Palette,
+  People,
+  TaskAlt,
+  Cable
 } from '@mui/icons-material';
 import ColorPickerPopover from './ColorPickerPopover';
 import axios from 'axios';
@@ -1685,14 +1690,14 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
     return option ? option.label : 'Disabled';
   };
 
-  const adminTabs = [
-    'Widgets',
-    'Interface',
-    'Users',
-    'Chores',
-    'Security',
-    'Connections',
-    'About'
+  const adminSections = [
+    { label: 'Widgets', icon: <Dashboard fontSize="small" />, description: 'Enable widgets, install plugins, and arrange tabs and devices.' },
+    { label: 'Interface', icon: <Palette fontSize="small" />, description: 'Colors, screensaver, dock behavior, and theme automation for this display.' },
+    { label: 'Users', icon: <People fontSize="small" />, description: 'The people chores can be assigned to. Only a name is needed.' },
+    { label: 'Chores', icon: <TaskAlt fontSize="small" />, description: 'Define chores, schedule them, and review completion history.' },
+    { label: 'Security', icon: <Lock fontSize="small" />, description: 'Protect these settings with a PIN.' },
+    { label: 'Connections', icon: <Cable fontSize="small" />, description: 'External services: weather, proxies, Google, and Home Assistant.' },
+    { label: 'About', icon: <Info fontSize="small" />, description: 'Version, build, and update information.' },
   ];
 
   const frontendRepository = isValidRepositorySlug(FRONTEND_GITHUB_REPOSITORY)
@@ -1729,16 +1734,82 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
   }
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h4" gutterBottom>
-        ⚙️ Admin Panel
-      </Typography>
+    <Box
+      sx={{
+        width: '100%',
+        maxWidth: 1200,
+        mx: 'auto',
+        display: 'flex',
+        flexDirection: { xs: 'column', md: 'row' },
+        gap: { xs: 2, md: 3 },
+        minHeight: { md: '70vh' },
+      }}
+    >
+      {/* Settings navigation */}
+      <Box
+        sx={{
+          flexShrink: 0,
+          width: { xs: '100%', md: 220 },
+          display: 'flex',
+          flexDirection: { xs: 'row', md: 'column' },
+          gap: 0.5,
+          overflowX: { xs: 'auto', md: 'visible' },
+          pb: { xs: 1, md: 0 },
+          borderRight: { md: '1px solid var(--card-border)' },
+          pr: { md: 2 },
+        }}
+      >
+        <Typography
+          variant="h6"
+          sx={{ display: { xs: 'none', md: 'block' }, fontWeight: 700, mb: 1.5, px: 1 }}
+        >
+          Settings
+        </Typography>
+        {adminSections.map((section, index) => {
+          const isActive = activeTab === index;
+          return (
+            <Box
+              key={section.label}
+              onClick={() => setActiveTab(index)}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.25,
+                px: 1.5,
+                py: 1,
+                borderRadius: 2,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                color: isActive ? 'var(--accent)' : 'var(--text)',
+                backgroundColor: isActive ? 'rgba(var(--accent-rgb), 0.12)' : 'transparent',
+                fontWeight: isActive ? 700 : 400,
+                transition: 'background-color 0.15s ease',
+                '&:hover': {
+                  backgroundColor: isActive
+                    ? 'rgba(var(--accent-rgb), 0.16)'
+                    : 'rgba(var(--accent-rgb), 0.06)',
+                },
+              }}
+            >
+              {section.icon}
+              <Typography variant="body2" sx={{ fontWeight: 'inherit' }}>
+                {section.label}
+              </Typography>
+            </Box>
+          );
+        })}
+      </Box>
 
-      <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)} sx={{ mb: 3 }}>
-        {adminTabs.map((tab, index) => (
-          <Tab key={tab} label={tab} />
-        ))}
-      </Tabs>
+      {/* Section content */}
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            {adminSections[activeTab]?.label}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'var(--text-secondary)' }}>
+            {adminSections[activeTab]?.description}
+          </Typography>
+        </Box>
 
       {/* Widgets Tab */}
       {activeTab === 0 && (
@@ -3652,15 +3723,15 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
         </Box>
       </Backdrop>
 
-      {/* PIN Modal */}
-      <PinModal
-        open={pinModal.open}
-        onClose={handlePinModalClose}
-        onVerify={handlePinVerify}
-        mode={pinModal.mode}
-        title={pinModal.title}
-      />
-
+        {/* PIN Modal */}
+        <PinModal
+          open={pinModal.open}
+          onClose={handlePinModalClose}
+          onVerify={handlePinVerify}
+          mode={pinModal.mode}
+          title={pinModal.title}
+        />
+      </Box>
     </Box>
   );
 };

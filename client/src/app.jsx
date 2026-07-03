@@ -1135,7 +1135,13 @@ const App = () => {
         )}
       </Box>
 
-      <Dialog open={showAdminPanel} onClose={toggleAdminPanel} maxWidth="lg">
+      <Dialog
+        open={showAdminPanel}
+        onClose={toggleAdminPanel}
+        maxWidth="lg"
+        fullWidth
+        slotProps={{ paper: { sx: { height: { sm: '88vh' }, borderRadius: 3 } } }}
+      >
         <DialogContent sx={{ position: 'relative' }}>
           <IconButton
             onClick={toggleAdminPanel}
