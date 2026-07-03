@@ -72,7 +72,7 @@ import {
 import ColorPickerPopover from './ColorPickerPopover';
 import axios from 'axios';
 import { API_BASE_URL } from '../utils/apiConfig.js';
-import { getDeviceName, setDeviceName, SHARED_DEVICE_NAME } from '../utils/deviceName.js';
+import { getDeviceName, setDeviceName, getDeviceApiBase, SHARED_DEVICE_NAME } from '../utils/deviceName.js';
 import PinModal from './PinModal';
 import ChoreSchedulesTab from './ChoreSchedulesTab';
 import ChoreHistoryTab from './ChoreHistoryTab';

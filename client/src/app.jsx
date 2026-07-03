@@ -517,6 +517,12 @@ const App = () => {
     document.documentElement.style.setProperty('--primary', interfaceColors.primary);
     document.documentElement.style.setProperty('--secondary', interfaceColors.secondary);
     document.documentElement.style.setProperty('--accent', interfaceColors.accent);
+    // Alpha highlights are built from --accent-rgb; keep it in step with --accent.
+    const hex = /^#?([0-9a-f]{6})$/i.exec(interfaceColors.accent?.trim() ?? '');
+    if (hex) {
+      const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16));
+      document.documentElement.style.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
+    }
   }, [interfaceColors]);
 
   useEffect(() => {
@@ -1164,7 +1170,7 @@ const App = () => {
         onClose={toggleAdminPanel}
         maxWidth="lg"
         fullWidth
-        slotProps={{ paper: { sx: { height: { sm: '88vh' }, borderRadius: 3 } } }}
+        slotProps={{ paper: { className: 'settings-dialog', sx: { height: { sm: '88vh' }, borderRadius: 3 } } }}
       >
         <DialogContent sx={{ position: 'relative' }}>
           <IconButton

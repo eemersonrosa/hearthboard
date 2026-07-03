@@ -386,8 +386,6 @@ const TabBar = ({
           gap: 0.5,
           px: vertical ? 1 : 2,
           py: vertical ? 2 : 1,
-          maxHeight: vertical ? 'calc(100vh - 32px)' : 'none',
-          overflowY: vertical ? 'auto' : 'visible',
           borderRadius: '24px',
           backgroundColor: 'var(--dock-bg)',
           border: '1px solid var(--dock-border)',
@@ -516,45 +514,120 @@ const TabBar = ({
           }}
         />
 
-        {/* Tab Icons */}
-        {displayTabs.map((tab) => {
-          const tabNumber = tab.number ?? tab.id;
-          const isActive = activeTab === tabNumber;
+        {/* Scrolling lives on the tab strip, not the dock container, so the
+            logo popup menu above is never clipped by an overflow box. */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: vertical ? 'column' : 'row',
+            alignItems: 'center',
+            gap: 0.5,
+            minHeight: 0,
+            maxHeight: vertical ? 'calc(100vh - 160px)' : 'none',
+            overflowY: vertical ? 'auto' : 'visible',
+          }}
+        >
+          {/* Tab Icons */}
+          {displayTabs.map((tab) => {
+            const tabNumber = tab.number ?? tab.id;
+            const isActive = activeTab === tabNumber;
 
-          return (
-            <Box
-              key={tab.id ?? tabNumber}
-              sx={{ position: 'relative' }}
-            >
-              {!widgetsLocked && tabNumber !== 1 && (
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteTab(tabNumber);
-                  }}
-                  sx={{
-                    position: 'absolute',
-                    top: -6,
-                    right: -6,
-                    width: 16,
-                    height: 16,
-                    minWidth: 0,
-                    padding: 0,
-                    backgroundColor: '#ff4444',
-                    color: 'white',
-                    zIndex: 10,
-                    '&:hover': {
-                      backgroundColor: '#cc0000',
-                    },
-                  }}
-                >
-                  <Close sx={{ fontSize: 10 }} />
-                </IconButton>
-              )}
-              <Tooltip title={tab.label || `Tab ${tabNumber}`} placement={tooltipPlacement}>
+            return (
+              <Box
+                key={tab.id ?? tabNumber}
+                sx={{ position: 'relative' }}
+              >
+                {!widgetsLocked && tabNumber !== 1 && (
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteTab(tabNumber);
+                    }}
+                    sx={{
+                      position: 'absolute',
+                      top: -6,
+                      right: -6,
+                      width: 16,
+                      height: 16,
+                      minWidth: 0,
+                      padding: 0,
+                      backgroundColor: '#ff4444',
+                      color: 'white',
+                      zIndex: 10,
+                      '&:hover': {
+                        backgroundColor: '#cc0000',
+                      },
+                    }}
+                  >
+                    <Close sx={{ fontSize: 10 }} />
+                  </IconButton>
+                )}
+                <Tooltip title={tab.label || `Tab ${tabNumber}`} placement={tooltipPlacement}>
+                  <Box
+                    onClick={() => onTabChange(tabNumber)}
+                    sx={{
+                      width: 44,
+                      height: 44,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      borderRadius: '12px',
+                      position: 'relative',
+                      transition: 'all 0.2s ease',
+                      backgroundColor: isActive ? 'var(--dock-active-bg)' : 'transparent',
+                      border: isActive ? '1.5px solid var(--dock-active-border)' : '1.5px solid transparent',
+                      boxShadow: isActive ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
+                      '&:hover': {
+                        backgroundColor: isActive ? 'var(--dock-active-bg)' : 'rgba(255, 255, 255, 0.08)',
+                        transform: 'translateY(-2px)',
+                      },
+                      '&:active': {
+                        transform: 'scale(0.95)',
+                      },
+                    }}
+                  >
+                    <TabIcon
+                      name={tab.icon}
+                      size={22}
+                      color={isActive ? 'var(--dock-active-icon)' : 'var(--dock-icon)'}
+                    />
+                    {isActive && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          bottom: 2,
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          width: 4,
+                          height: 4,
+                          borderRadius: '50%',
+                          backgroundColor: 'var(--dock-active-icon)',
+                        }}
+                      />
+                    )}
+                  </Box>
+                </Tooltip>
+              </Box>
+            );
+          })}
+
+          {/* Add Tab Button (only in edit mode) */}
+          {!widgetsLocked && (
+            <>
+              <Box
+                sx={{
+                  width: vertical ? '28px' : '1px',
+                  height: vertical ? '1px' : '28px',
+                  backgroundColor: 'var(--dock-separator)',
+                  mx: vertical ? 0 : 0.5,
+                  my: vertical ? 0.5 : 0,
+                }}
+              />
+              <Tooltip title="Add new tab" placement={tooltipPlacement}>
                 <Box
-                  onClick={() => onTabChange(tabNumber)}
+                  onClick={onAddTab}
                   sx={{
                     width: 44,
                     height: 44,
@@ -563,98 +636,37 @@ const TabBar = ({
                     justifyContent: 'center',
                     cursor: 'pointer',
                     borderRadius: '12px',
-                    position: 'relative',
                     transition: 'all 0.2s ease',
-                    backgroundColor: isActive ? 'var(--dock-active-bg)' : 'transparent',
-                    border: isActive ? '1.5px solid var(--dock-active-border)' : '1.5px solid transparent',
-                    boxShadow: isActive ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
                     '&:hover': {
-                      backgroundColor: isActive ? 'var(--dock-active-bg)' : 'rgba(255, 255, 255, 0.08)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
                       transform: 'translateY(-2px)',
-                    },
-                    '&:active': {
-                      transform: 'scale(0.95)',
                     },
                   }}
                 >
-                  <TabIcon
-                    name={tab.icon}
-                    size={22}
-                    color={isActive ? 'var(--dock-active-icon)' : 'var(--dock-icon)'}
-                  />
-                  {isActive && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        bottom: 2,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        width: 4,
-                        height: 4,
-                        borderRadius: '50%',
-                        backgroundColor: 'var(--dock-active-icon)',
-                      }}
-                    />
-                  )}
+                  <Add sx={{ fontSize: 20, color: 'var(--dock-icon)' }} />
                 </Box>
               </Tooltip>
-            </Box>
-          );
-        })}
+            </>
+          )}
 
-        {/* Add Tab Button (only in edit mode) */}
-        {!widgetsLocked && (
-          <>
-            <Box
-              sx={{
-                width: vertical ? '28px' : '1px',
-                height: vertical ? '1px' : '28px',
-                backgroundColor: 'var(--dock-separator)',
-                mx: vertical ? 0 : 0.5,
-                my: vertical ? 0.5 : 0,
-              }}
-            />
-            <Tooltip title="Add new tab" placement={tooltipPlacement}>
+          {/* Separator before screensaver */}
+          {screensaverCountdown && (
+            <>
               <Box
-                onClick={onAddTab}
                 sx={{
-                  width: 44,
-                  height: 44,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  borderRadius: '12px',
-                  transition: 'all 0.2s ease',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                    transform: 'translateY(-2px)',
-                  },
+                  width: vertical ? '28px' : '1px',
+                  height: vertical ? '1px' : '28px',
+                  backgroundColor: 'var(--dock-separator)',
+                  mx: vertical ? 0 : 0.5,
+                  my: vertical ? 0.5 : 0,
                 }}
-              >
-                <Add sx={{ fontSize: 20, color: 'var(--dock-icon)' }} />
+              />
+              <Box sx={{ display: 'flex', alignItems: 'center', px: 0.5 }}>
+                {screensaverCountdown}
               </Box>
-            </Tooltip>
-          </>
-        )}
-
-        {/* Separator before screensaver */}
-        {screensaverCountdown && (
-          <>
-            <Box
-              sx={{
-                width: vertical ? '28px' : '1px',
-                height: vertical ? '1px' : '28px',
-                backgroundColor: 'var(--dock-separator)',
-                mx: vertical ? 0 : 0.5,
-                my: vertical ? 0.5 : 0,
-              }}
-            />
-            <Box sx={{ display: 'flex', alignItems: 'center', px: 0.5 }}>
-              {screensaverCountdown}
-            </Box>
-          </>
-        )}
+            </>
+          )}
+        </Box>
       </Box>
     </Box>
   );
