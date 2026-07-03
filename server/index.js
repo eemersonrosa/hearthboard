@@ -3578,6 +3578,8 @@ fastify.patch('/api/photo-sources/:id', async (request, reply) => {
     if (info.changes === 0) {
       return reply.status(404).send({ error: 'Photo source not found' });
     }
+    // The source may now point elsewhere; drop its cached daily photo sample.
+    immichDailySamples.delete(Number(id));
     return { success: true, message: 'Photo source updated successfully' };
   } catch (error) {
     console.error('Error updating photo source:', error);
@@ -3601,6 +3603,7 @@ fastify.delete('/api/photo-sources/:id', async (request, reply) => {
     if (info.changes === 0) {
       return reply.status(404).send({ error: 'Photo source not found' });
     }
+    immichDailySamples.delete(Number(id));
     return { success: true, message: 'Photo source deleted successfully' };
   } catch (error) {
     console.error('Error deleting photo source:', error);
@@ -4008,6 +4011,18 @@ fastify.delete('/api/photo-sources/:sourceId/picker-session', async (request, re
   }
 });
 
+const IMMICH_DAILY_SAMPLE_SIZE = 250;
+const IMMICH_ALBUM_MAX_PAGES = 50;
+// Daily random sample per Immich source: the picks re-randomize once per
+// server-local calendar day, not on every widget refresh. In-memory, so a
+// server restart also re-randomizes.
+const immichDailySamples = new Map();
+
+const localDateKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+};
+
 fastify.get('/api/photo-items', async (request, reply) => {
   try {
     const sources = db.prepare('SELECT * FROM photo_sources WHERE enabled = 1 ORDER BY sort_order, id').all();
@@ -4030,12 +4045,19 @@ fastify.get('/api/photo-items', async (request, reply) => {
 
           let assets = [];
 
-          if (source.album_id) {
+          const today = localDateKey();
+          const cachedSample = immichDailySamples.get(source.id);
+          if (cachedSample && cachedSample.date === today && cachedSample.albumId === (source.album_id || null)) {
+            assets = cachedSample.assets;
+          } else if (source.album_id) {
             // Immich v3 removed the `assets` array from GET /api/albums/{id}
             // (https://immich.app/blog/v3-migration). Fetch album assets via the
             // paginated metadata search instead — works on both Immich v2 and v3.
+            // Reservoir-sample while paging so the daily picks are uniform over
+            // the whole album without holding more than the sample in memory.
             let page = 1;
-            while (page && assets.length < 1000) {
+            let seen = 0;
+            while (page && page <= IMMICH_ALBUM_MAX_PAGES) {
               const searchResponse = await axios.post(`${apiBase}/search/metadata`,
                 { albumIds: [source.album_id], page, size: 1000 },
                 {
@@ -4044,23 +4066,33 @@ fastify.get('/api/photo-items', async (request, reply) => {
                 }
               );
               const bucket = searchResponse.data?.assets || {};
-              assets.push(...(bucket.items || []));
+              for (const item of (bucket.items || [])) {
+                if (assets.length < IMMICH_DAILY_SAMPLE_SIZE) {
+                  assets.push(item);
+                } else {
+                  const j = Math.floor(Math.random() * (seen + 1));
+                  if (j < IMMICH_DAILY_SAMPLE_SIZE) assets[j] = item;
+                }
+                seen++;
+              }
               page = bucket.nextPage ? Number(bucket.nextPage) : null;
             }
+            // The reservoir is a uniform sample but its order is biased; shuffle.
             for (let i = assets.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
               [assets[i], assets[j]] = [assets[j], assets[i]];
             }
-            assets = assets.slice(0, 100);
+            immichDailySamples.set(source.id, { date: today, albumId: source.album_id, assets });
           } else {
             const response = await axios.post(`${apiBase}/search/random`,
-              { size: 100 },
+              { size: IMMICH_DAILY_SAMPLE_SIZE },
               {
                 headers: immichHeaders,
                 timeout: 15000
               }
             );
             assets = response.data || [];
+            immichDailySamples.set(source.id, { date: today, albumId: null, assets });
           }
 
           return assets.map(asset => ({
