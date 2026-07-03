@@ -536,3 +536,87 @@ test('home assistant endpoints: status, config, and alert rules contract', async
     });
     assert.equal(blockedDomainRes.status, 400);
 });
+
+test('chores lifecycle: define, schedule, complete, reassign, uncomplete', async () => {
+    // Create two users to reassign between.
+    const userARes = await api('/api/users', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'Lifecycle A' }),
+    });
+    const userBRes = await api('/api/users', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'Lifecycle B' }),
+    });
+    assert.equal(userARes.status, 200);
+    assert.equal(userBRes.status, 200);
+    const userA = userARes.body.id;
+    const userB = userBRes.body.id;
+
+    // Define a chore; is_bonus is the only extra flag on a chore.
+    const choreRes = await api('/api/chores', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Take out trash', description: 'Bins to the curb', is_bonus: false }),
+    });
+    assert.equal(choreRes.status, 200);
+    const choreId = choreRes.body.id;
+
+    const choresList = await api('/api/chores');
+    const chore = choresList.body.find((row) => row.id === choreId);
+    assert.ok(chore);
+    assert.equal(chore.is_bonus, 0);
+    assert.ok(!('clam_value' in chore), 'reward economy removed; chores expose is_bonus only');
+
+    // Schedule it daily for user A.
+    const scheduleRes = await api('/api/chore-schedules', {
+        method: 'POST',
+        body: JSON.stringify({ chore_id: choreId, user_id: userA, crontab: '0 0 * * *', visible: 1 }),
+    });
+    assert.equal(scheduleRes.status, 200);
+    const scheduleId = scheduleRes.body.id;
+
+    const schedulesList = await api('/api/chore-schedules');
+    const schedule = schedulesList.body.find((row) => row.id === scheduleId);
+    assert.ok(schedule);
+    assert.equal(schedule.user_id, userA);
+    assert.equal(typeof schedule.title, 'string');
+
+    // Complete it today.
+    const today = new Date().toISOString().slice(0, 10);
+    const completeRes = await api('/api/chores/complete', {
+        method: 'POST',
+        body: JSON.stringify({ chore_schedule_id: scheduleId, user_id: userA, date: today }),
+    });
+    assert.equal(completeRes.status, 200);
+    assert.equal(completeRes.body.success, true);
+    assert.ok(!('clam_total' in completeRes.body), 'completion no longer returns point totals');
+
+    // Double completion is rejected.
+    const doubleCompleteRes = await api('/api/chores/complete', {
+        method: 'POST',
+        body: JSON.stringify({ chore_schedule_id: scheduleId, user_id: userA, date: today }),
+    });
+    assert.equal(doubleCompleteRes.status, 409);
+
+    // History records the completion.
+    const historyRes = await api(`/api/chore-history?user_id=${userA}&date=${today}`);
+    assert.equal(historyRes.status, 200);
+    assert.ok(historyRes.body.some((row) => row.chore_schedule_id === scheduleId));
+
+    // Reassign to user B (PR #110 behavior).
+    const reassignRes = await api(`/api/chore-schedules/${scheduleId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ user_id: userB }),
+    });
+    assert.equal(reassignRes.status, 200);
+    const afterReassign = await api(`/api/chore-schedules/${scheduleId}`);
+    assert.equal(afterReassign.body.user_id, userB);
+
+    // Uncomplete removes the history row (as user A, who completed it).
+    const uncompleteRes = await api('/api/chores/uncomplete', {
+        method: 'POST',
+        body: JSON.stringify({ chore_schedule_id: scheduleId, user_id: userA, date: today }),
+    });
+    assert.equal(uncompleteRes.status, 200);
+    const historyAfter = await api(`/api/chore-history?user_id=${userA}&date=${today}`);
+    assert.ok(!historyAfter.body.some((row) => row.chore_schedule_id === scheduleId));
+});
