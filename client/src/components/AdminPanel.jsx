@@ -79,6 +79,22 @@ const DEVICE_SETTINGS_UPDATED_EVENT = 'hearthboard:device-settings-updated';
 const INTERFACE_SETTINGS_UPDATED_EVENT = 'hearthboard:interface-settings-updated';
 const INTERFACE_COLORS_STORAGE_KEY = 'interfaceColors';
 const INTERFACE_SCREENSAVER_STORAGE_KEY = 'screensaverSettings';
+const DOCK_SETTINGS_STORAGE_KEY = 'dockSettings';
+
+const DEFAULT_DOCK_SETTINGS = {
+  autoHide: false,
+  autoHideDelay: 10,
+};
+
+const readLocalDockSettings = () => {
+  try {
+    const raw = localStorage.getItem(DOCK_SETTINGS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_DOCK_SETTINGS };
+    return { ...DEFAULT_DOCK_SETTINGS, ...JSON.parse(raw) };
+  } catch {
+    return { ...DEFAULT_DOCK_SETTINGS };
+  }
+};
 const INTERFACE_AUTO_DARK_MODE_STORAGE_KEY = 'autoDarkModeSettings';
 const DEFAULT_AUTO_DARK_MODE_SETTINGS = {
   enabled: false,
@@ -243,6 +259,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
   const [pluginAssignments, setPluginAssignments] = useState({});
   const [photoSources, setPhotoSources] = useState([]);
   const [screensaverSettings, setScreensaverSettings] = useState(readLocalScreensaverSettings);
+  const [dockSettings, setDockSettings] = useState(readLocalDockSettings);
   const [autoDarkModeSettings, setAutoDarkModeSettings] = useState(readLocalAutoDarkModeSettings);
   const [isSavingAutoDarkMode, setIsSavingAutoDarkMode] = useState(false);
   const [autoDarkModeSunTimes, setAutoDarkModeSunTimes] = useState({
@@ -1043,6 +1060,24 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
       setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const saveDockSettings = () => {
+    try {
+      const normalized = {
+        autoHide: !!dockSettings.autoHide,
+        autoHideDelay: Math.max(3, parseInt(dockSettings.autoHideDelay, 10) || 10),
+      };
+      localStorage.setItem(DOCK_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
+      setDockSettings(normalized);
+      window.dispatchEvent(new Event(INTERFACE_SETTINGS_UPDATED_EVENT));
+      setSaveMessage({ show: true, type: 'success', text: 'Dock settings saved for this display.' });
+      setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error saving dock settings:', error);
+      setSaveMessage({ show: true, type: 'error', text: 'Failed to save dock settings. Please try again.' });
+      setTimeout(() => setSaveMessage({ show: false, type: '', text: '' }), 3000);
     }
   };
 
@@ -2512,6 +2547,56 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
                 sx={{ mt: 2 }}
               >
                 Save Screensaver Settings
+              </Button>
+
+              <Divider sx={{ my: 4 }} />
+
+              <Typography variant="h6" sx={{ mb: 2 }}>Dock</Typography>
+
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!dockSettings.autoHide}
+                    onChange={(e) => setDockSettings(prev => ({ ...prev, autoHide: e.target.checked }))}
+                  />
+                }
+                label="Auto-hide dock when idle"
+                sx={{ mb: 1, display: 'block' }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                The dock collapses to a slim handle on the edge of the screen when you are not
+                interacting with the display, and reappears on any touch, scroll, or mouse movement.
+              </Typography>
+
+              {dockSettings.autoHide && (
+                <>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                    Hide after: {dockSettings.autoHideDelay} second{dockSettings.autoHideDelay !== 1 ? 's' : ''} of inactivity
+                  </Typography>
+                  <Slider
+                    value={dockSettings.autoHideDelay}
+                    onChange={(e, value) => setDockSettings(prev => ({ ...prev, autoHideDelay: value }))}
+                    min={3}
+                    max={120}
+                    marks={[
+                      { value: 5, label: '5s' },
+                      { value: 15, label: '15s' },
+                      { value: 60, label: '60s' },
+                      { value: 120, label: '2m' }
+                    ]}
+                    sx={{ mb: 2 }}
+                  />
+                </>
+              )}
+
+              <Button
+                variant="contained"
+                onClick={saveDockSettings}
+                startIcon={<Save />}
+                fullWidth
+                sx={{ mt: 1 }}
+              >
+                Save Dock Settings
               </Button>
 
               <Divider sx={{ my: 4 }} />

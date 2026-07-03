@@ -1,6 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Box, IconButton, Tooltip, Typography, ClickAwayListener } from '@mui/material';
-import { Close, Add } from '@mui/icons-material';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Box, IconButton, Tooltip, Typography, ClickAwayListener, useMediaQuery } from '@mui/material';
+import { Close, Add, ChevronLeft } from '@mui/icons-material';
+
+const DOCK_IDLE_EVENTS = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'wheel'];
 
 const TabIcon = ({ name, size = 24, color = 'currentColor' }) => {
   const icons = {
@@ -233,9 +235,52 @@ const TabBar = ({
   theme,
   themeMode,
   screensaverCountdown,
+  autoHide = false,
+  autoHideDelay = 10,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuAnchorRef = useRef(null);
+
+  // The dock lives on the right edge on larger screens and falls back to the
+  // bottom on narrow (mobile) viewports where a side dock would eat width.
+  const isNarrow = useMediaQuery('(max-width: 700px)');
+  const vertical = !isNarrow;
+  const tooltipPlacement = vertical ? 'left' : 'top';
+
+  // Idle auto-minimize: collapse to a slim handle when there has been no
+  // interaction for `autoHideDelay` seconds; any activity brings it back.
+  const [minimized, setMinimized] = useState(false);
+  const idleTimerRef = useRef(null);
+  const menuOpenRef = useRef(menuOpen);
+  useEffect(() => { menuOpenRef.current = menuOpen; }, [menuOpen]);
+
+  const armIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      if (!menuOpenRef.current) setMinimized(true);
+    }, Math.max(3, autoHideDelay) * 1000);
+  }, [autoHideDelay]);
+
+  useEffect(() => {
+    if (!autoHide) {
+      setMinimized(false);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      return;
+    }
+
+    const handleActivity = () => {
+      setMinimized(false);
+      armIdleTimer();
+    };
+
+    DOCK_IDLE_EVENTS.forEach((event) => window.addEventListener(event, handleActivity, { passive: true }));
+    armIdleTimer();
+
+    return () => {
+      DOCK_IDLE_EVENTS.forEach((event) => window.removeEventListener(event, handleActivity));
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [autoHide, armIdleTimer]);
 
   const defaultHomeTab = {
     id: 1,
@@ -265,27 +310,84 @@ const TabBar = ({
     { id: 'theme', icon: getThemeIconName(), label: getThemeLabel(), action: onToggleTheme },
   ];
 
+  if (minimized) {
+    return (
+      <Box
+        onClick={() => setMinimized(false)}
+        sx={{
+          position: 'fixed',
+          zIndex: 9999,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'var(--dock-bg)',
+          border: '1px solid var(--dock-border)',
+          backdropFilter: 'blur(20px)',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
+          transition: 'all 0.2s ease',
+          ...(vertical
+            ? {
+              right: 0,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 18,
+              height: 72,
+              borderRadius: '10px 0 0 10px',
+              borderRight: 'none',
+            }
+            : {
+              bottom: 0,
+              left: '50%',
+              transform: 'translateX(-50%) rotate(90deg)',
+              width: 18,
+              height: 72,
+              borderRadius: '10px 0 0 10px',
+            }),
+          '&:hover': {
+            backgroundColor: 'var(--dock-active-bg)',
+          },
+        }}
+        aria-label="Show dock"
+      >
+        <ChevronLeft sx={{ fontSize: 16, color: 'var(--dock-icon)' }} />
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
         position: 'fixed',
-        bottom: 16,
-        left: '50%',
-        transform: 'translateX(-50%)',
         zIndex: 9999,
         display: 'flex',
         alignItems: 'center',
         gap: 0,
         pointerEvents: 'none',
+        ...(vertical
+          ? {
+            right: 12,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            flexDirection: 'column',
+          }
+          : {
+            bottom: 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }),
       }}
     >
       <Box
         sx={{
           display: 'flex',
+          flexDirection: vertical ? 'column' : 'row',
           alignItems: 'center',
           gap: 0.5,
-          px: 2,
-          py: 1,
+          px: vertical ? 1 : 2,
+          py: vertical ? 2 : 1,
+          maxHeight: vertical ? 'calc(100vh - 32px)' : 'none',
+          overflowY: vertical ? 'auto' : 'visible',
           borderRadius: '24px',
           backgroundColor: 'var(--dock-bg)',
           border: '1px solid var(--dock-border)',
@@ -298,7 +400,7 @@ const TabBar = ({
         <Box sx={{ position: 'relative' }} ref={menuAnchorRef}>
           <ClickAwayListener onClickAway={() => setMenuOpen(false)}>
             <Box>
-              <Tooltip title="Menu" placement="top">
+              <Tooltip title="Menu" placement={tooltipPlacement}>
                 <Box
                   onClick={() => setMenuOpen(!menuOpen)}
                   sx={{
@@ -336,10 +438,19 @@ const TabBar = ({
                 <Box
                   sx={{
                     position: 'absolute',
-                    bottom: '100%',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    mb: 1.5,
+                    ...(vertical
+                      ? {
+                        right: '100%',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        mr: 1.5,
+                      }
+                      : {
+                        bottom: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        mb: 1.5,
+                      }),
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 0.5,
@@ -397,10 +508,11 @@ const TabBar = ({
         {/* Separator */}
         <Box
           sx={{
-            width: '1px',
-            height: '28px',
+            width: vertical ? '28px' : '1px',
+            height: vertical ? '1px' : '28px',
             backgroundColor: 'var(--dock-separator)',
-            mx: 0.5,
+            mx: vertical ? 0 : 0.5,
+            my: vertical ? 0.5 : 0,
           }}
         />
 
@@ -440,7 +552,7 @@ const TabBar = ({
                   <Close sx={{ fontSize: 10 }} />
                 </IconButton>
               )}
-              <Tooltip title={tab.label || `Tab ${tabNumber}`} placement="top">
+              <Tooltip title={tab.label || `Tab ${tabNumber}`} placement={tooltipPlacement}>
                 <Box
                   onClick={() => onTabChange(tabNumber)}
                   sx={{
@@ -495,13 +607,14 @@ const TabBar = ({
           <>
             <Box
               sx={{
-                width: '1px',
-                height: '28px',
+                width: vertical ? '28px' : '1px',
+                height: vertical ? '1px' : '28px',
                 backgroundColor: 'var(--dock-separator)',
-                mx: 0.5,
+                mx: vertical ? 0 : 0.5,
+                my: vertical ? 0.5 : 0,
               }}
             />
-            <Tooltip title="Add new tab" placement="top">
+            <Tooltip title="Add new tab" placement={tooltipPlacement}>
               <Box
                 onClick={onAddTab}
                 sx={{
@@ -530,10 +643,11 @@ const TabBar = ({
           <>
             <Box
               sx={{
-                width: '1px',
-                height: '28px',
+                width: vertical ? '28px' : '1px',
+                height: vertical ? '1px' : '28px',
                 backgroundColor: 'var(--dock-separator)',
-                mx: 0.5,
+                mx: vertical ? 0 : 0.5,
+                my: vertical ? 0.5 : 0,
               }}
             />
             <Box sx={{ display: 'flex', alignItems: 'center', px: 0.5 }}>

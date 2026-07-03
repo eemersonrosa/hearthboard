@@ -26,6 +26,7 @@ const THEME_STORAGE_KEY = 'theme';
 const THEME_MODE_STORAGE_KEY = 'themeMode';
 const INTERFACE_COLORS_STORAGE_KEY = 'interfaceColors';
 const SCREENSAVER_SETTINGS_STORAGE_KEY = 'screensaverSettings';
+const DOCK_SETTINGS_STORAGE_KEY = 'dockSettings';
 
 const shouldSkipWarmupForConnection = () => {
   if (typeof navigator === 'undefined') return false;
@@ -76,6 +77,26 @@ const DEFAULT_SCREENSAVER_SETTINGS = {
   mode: 'tabs',
   timeout: 5,
   slideshowInterval: 10,
+};
+
+const DEFAULT_DOCK_SETTINGS = {
+  autoHide: false,
+  autoHideDelay: 10,
+};
+
+const normalizeDockSettings = (raw) => ({
+  ...DEFAULT_DOCK_SETTINGS,
+  ...(raw && typeof raw === 'object' ? raw : {}),
+});
+
+const readLocalDockSettings = () => {
+  try {
+    const raw = localStorage.getItem(DOCK_SETTINGS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_DOCK_SETTINGS };
+    return normalizeDockSettings(JSON.parse(raw));
+  } catch {
+    return { ...DEFAULT_DOCK_SETTINGS };
+  }
 };
 
 const DEFAULT_INTERFACE_COLORS = {
@@ -140,9 +161,10 @@ const normalizeInterfaceColors = (raw) => ({
   ...(raw && typeof raw === 'object' ? raw : {}),
 });
 
+// Hearthboard defaults to dark mode; light is an explicit opt-in.
 const readLocalTheme = () => {
   const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-  return savedTheme === 'dark' ? 'dark' : 'light';
+  return savedTheme === 'light' ? 'light' : 'dark';
 };
 
 const readLocalThemeMode = (fallbackTheme) => {
@@ -151,7 +173,7 @@ const readLocalThemeMode = (fallbackTheme) => {
     return savedThemeMode;
   }
 
-  return fallbackTheme === 'dark' ? 'dark' : 'light';
+  return fallbackTheme === 'light' ? 'light' : 'dark';
 };
 
 const readLocalInterfaceColors = () => {
@@ -223,6 +245,7 @@ const App = () => {
   const [widgetsLocked, setWidgetsLocked] = useState(readLocalWidgetsLocked);
   const [screensaverActive, setScreensaverActive] = useState(false);
   const [screensaverSettings, setScreensaverSettings] = useState(readLocalScreensaverSettings);
+  const [dockSettings, setDockSettings] = useState(readLocalDockSettings);
   const inactivityTimerRef = useRef(null);
   const lastActivityRef = useRef(Date.now());
   const [widgetSettings, setWidgetSettings] = useState({ ...DEFAULT_WIDGET_SETTINGS });
@@ -504,6 +527,7 @@ const App = () => {
       setInterfaceColors(readLocalInterfaceColors());
       setScreensaverSettings(readLocalScreensaverSettings());
       setAutoDarkModeSettings(readLocalAutoDarkModeSettings());
+      setDockSettings(readLocalDockSettings());
 
       const localTheme = readLocalTheme();
       const localThemeMode = readLocalThemeMode(localTheme);
@@ -904,7 +928,7 @@ const App = () => {
 
   return (
     <>
-      <Box sx={{ width: '100%', minHeight: '100vh', position: 'relative', pb: '80px' }}>
+      <Box sx={{ width: '100%', minHeight: '100vh', position: 'relative', pb: { xs: '80px', sm: 0 }, pr: { xs: 0, sm: '76px' } }}>
         {widgets.length > 0 && (
           <WidgetContainer
             widgets={widgets}
@@ -1013,6 +1037,8 @@ const App = () => {
         onRefresh={handlePageRefresh}
         theme={theme}
         themeMode={themeMode}
+        autoHide={dockSettings.autoHide}
+        autoHideDelay={dockSettings.autoHideDelay}
         screensaverCountdown={
           <ScreensaverCountdown
             enabled={screensaverSettings.enabled}
