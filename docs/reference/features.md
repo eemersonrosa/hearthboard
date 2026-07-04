@@ -114,7 +114,9 @@ and the `calendar-sources` / `calendar-sync` / `calendar-events` routes.
 Three source types feed one photo widget:
 
 - **Immich** — self-hosted photo server (API key + album); images streamed via
-  `/api/photo-proxy`.
+  `/api/photo-proxy`. Each source shows a **daily random sample** of up to 250
+  photos: the picks are stable for a calendar day and re-roll at midnight (or on
+  server restart / source edit).
 - **Google Photos** — via OAuth + the Photos **Picker** flow; picked media is
   downloaded locally (`google_picked_media`).
 - **Hearthboard uploads** — images uploaded directly (including from a phone via the
@@ -149,6 +151,36 @@ API key stored via `/api/settings`.
 
 **Code:** `PluginWidgetWrapper.jsx`, backend `/api/widgets*` routes, and
 [`server/widgets/README.md`](../../server/widgets/README.md).
+
+## Configuration backup (export / import)
+
+Admin → **Backup** exports the entire configuration to a single JSON file and
+imports it on another deployment — the supported way to migrate Hearthboard to a
+new machine or keep a restorable snapshot.
+
+- **What's included:** global settings, devices, tabs, widget layouts and sizes,
+  users, chores, schedules, history, manual calendar events, calendar and photo
+  sources, and the admin PIN hash.
+- **What's not:** uploaded files (photos, sounds, avatars, plugin widget HTML)
+  and linked Google accounts (OAuth tokens can't move between machines —
+  re-link on the new host).
+- **Secrets are made portable.** Credentials stored encrypted with the server's
+  `ENCRYPTION_KEY` (calendar passwords, photo API keys, the Home Assistant
+  token) are decrypted into the export and re-encrypted with the *target*
+  server's key on import — so a backup restores cleanly on a machine with a
+  different key.
+- **Optional encryption:** a toggle encrypts the export with a user passphrase
+  (scrypt key derivation + AES-256-GCM). Unencrypted exports contain secrets in
+  plain text — the UI warns about this. The passphrase is required at import
+  and cannot be recovered.
+- **Import replaces everything** (single SQLite transaction, confirmation
+  dialog first). Schema-migration bookkeeping (`SYSTEM_SCHEMA_ID`, …) is
+  excluded from exports and preserved on import, so an old backup can't roll
+  back the database schema; unknown columns in newer exports are dropped, and
+  files from a newer Hearthboard version are rejected.
+
+**Code:** Backup section in `AdminPanel.jsx`; `/api/config/export` and
+`/api/config/import` in `server/index.js`.
 
 ## Admin Panel & PIN
 

@@ -14,8 +14,9 @@ no subscriptions, no cloud accounts, everything runs on your own hardware.
 
 **Design & experience**
 - **Dark mode by default**, with light mode a tap away.
-- **Right-side dock** with tabs, settings, and theme toggle. Optionally
-  **auto-hides when idle** and reappears on any touch or scroll.
+- **Right-side dock** with tabs, settings, and theme toggle. **Auto-hides when
+  idle by default** and reappears on any touch or scroll, so widgets get the
+  full screen width.
 - **Drag-and-drop layout** on a 12-column grid for wall displays.
 - **Mobile view**: on phones the grid becomes a single stacked column — chores on
   top for quick access, a compact next-7-days agenda calendar, and plugins at
@@ -36,7 +37,8 @@ no subscriptions, no cloud accounts, everything runs on your own hardware.
 - **Users need only a name** — no email addresses.
 - **Calendar**: multiple sources (ICS, CalDAV, Google), month/week views, and a
   simple agenda view on mobile.
-- **Photos**: Immich integration (v2 and v3), slideshow, and screensaver mode.
+- **Photos**: Immich integration (v2 and v3) with a daily random sample per
+  source, slideshow, and screensaver mode.
 
 **Home Assistant**
 - **Control panel widget**: search your entities, star favorites, and toggle
@@ -50,6 +52,10 @@ no subscriptions, no cloud accounts, everything runs on your own hardware.
 - All displays share **one profile by default** — same tabs, same widgets everywhere.
 - Any display can be **personalized** from the admin panel; it starts as a copy
   of the shared profile and can be reverted at any time.
+- **Backup & migrate**: export the entire configuration (settings, tabs, widget
+  layouts, users, chores, calendar and photo sources) to a single file —
+  optionally passphrase-encrypted — and import it on a fresh deployment to
+  recreate the same setup on another machine.
 
 **Plugins**
 - Upload single-file HTML widgets or install them from a GitHub repository.

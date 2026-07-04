@@ -75,7 +75,9 @@ docs/             Architecture, guides, and reference
    - API changes → `docs/reference/backend-api.md`
    - Schema changes → `docs/architecture/database.md`
    - New settings/widgets → `docs/reference/configuration.md`
-7. Commit with a message that says *why*, then open a PR. CI runs the same
+7. If you added or updated a dependency, commit the updated
+   `package-lock.json` too — CI installs with `npm ci` and will fail without it.
+8. Commit with a message that says *why*, then open a PR. CI runs the same
    tests on every push.
 
 ## Conventions worth knowing

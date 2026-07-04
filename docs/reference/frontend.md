@@ -65,7 +65,7 @@ custom properties.
 ### Admin & configuration
 | Component | Role |
 | --- | --- |
-| `AdminPanel.jsx` (largest file) | The settings hub (sidebar layout): widgets & plugins, interface (colors, screensaver, dock), users, chores, security PIN, connections (weather, Google, Home Assistant), about. |
+| `AdminPanel.jsx` (largest file) | The settings hub (sidebar layout): widgets & plugins, interface (colors, screensaver, dock), users, chores, security PIN, connections (weather, Google, Home Assistant), configuration backup (export/import), about. |
 | `ChoreSchedulesTab.jsx` | Manage chores and their recurring schedules (cron/duration/interval). |
 | `ChoreHistoryTab.jsx` | View/delete recent chore completions. |
 | `GoogleAccountConnection.jsx` | Google OAuth linking UI (calendar/photos). |

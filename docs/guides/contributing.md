@@ -15,7 +15,10 @@ land a change confidently.
 6. Open a **Pull Request** with a clear description.
 
 CI runs the frontend and backend test suites on every push
-([`ci-tests.yml`](../../.github/workflows/ci-tests.yml)); keep them green.
+([`ci-tests.yml`](../../.github/workflows/ci-tests.yml), plus
+[`ci.yml`](../../.github/workflows/ci.yml) with a client build check on `main`
+and PRs); keep them green. Both install with `npm ci`, so dependency changes
+must include the updated `package-lock.json`.
 
 ## Project conventions
 
@@ -32,6 +35,11 @@ CI runs the frontend and backend test suites on every push
   `Suspense` + idle-warmup pattern in [`app.jsx`](../../client/src/app.jsx).
 - **Secrets** (calendar/Google credentials) must be encrypted before storage; use the
   existing encryption helpers.
+- **Lockfiles are committed.** `server/package-lock.json` and
+  `client/package-lock.json` are tracked; CI and the Docker builds use `npm ci`.
+  Commit the lockfile whenever you add or update a dependency. If CI ever fails
+  with `npm ci` "Missing: … from lock file" (platform-specific optional deps),
+  regenerate from a clean slate: `rm -rf node_modules package-lock.json && npm install`.
 - Add **error handling** and keep touch/mouse parity for interactive UI.
 
 ## Testing

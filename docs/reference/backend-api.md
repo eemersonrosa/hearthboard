@@ -161,6 +161,15 @@ static route.
 | POST | `/api/test-api-key` | Validate an OpenWeatherMap key. |
 | GET | `/api/proxy` | Generic CORS proxy (used by widgets/integrations). |
 
+### Configuration backup
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/config/export` | Export the full configuration (settings, devices, tabs, users, chores, calendar/photo sources, admin PIN) as one JSON envelope. Stored secrets are decrypted for portability. Body `{ encrypt, passphrase }`; when `encrypt` is true the payload is scrypt + AES-256-GCM encrypted with the passphrase. |
+| POST | `/api/config/import` | Replace the entire configuration from an export file (`{ file, passphrase }`, 25 MB body limit). Runs in one transaction; re-encrypts secrets with the local `ENCRYPTION_KEY`; preserves schema-migration bookkeeping; drops columns unknown to the local schema; rejects files from a newer export version. Restarts calendar sync afterwards. |
+
+See [Features → Configuration backup](features.md#configuration-backup-export--import)
+for what's included/excluded and the file format rationale.
+
 ### Calendar sources, events & sync
 | Method | Path | Purpose |
 | --- | --- | --- |

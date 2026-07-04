@@ -63,6 +63,7 @@ Open with the gear (⚙️) icon. These persist server-side (global settings in 
 | **Plugins** | Upload/install/enable custom widgets | `server/widgets/`, `widgets_registry.json`, per-device plugin settings |
 | **Interface** | Theme mode, gradients, interface colors, screensaver | `localStorage` + `device_settings_json` |
 | **Security** | Admin PIN | `admin_pin` |
+| **Backup** | Export/import the entire configuration as one file, optionally passphrase-encrypted — see [Features → Configuration backup](features.md#configuration-backup-export--import) | all config tables |
 
 ## Refresh intervals
 
@@ -83,3 +84,6 @@ the chore widget, stored as `choreWidgetSettings.soundEnabled` in that device's
 - For HTTPS / a custom domain, put it behind a reverse proxy (Nginx, Traefik,
   Cloudflare Tunnel, etc.) and add your own access control.
 - Keep `ENCRYPTION_KEY` secret and stable.
+- **Unencrypted configuration exports contain secrets in plain text** (API keys,
+  calendar passwords, tokens). Enable the encryption toggle when exporting, or
+  store the file somewhere safe and delete it after use.
