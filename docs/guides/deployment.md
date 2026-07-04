@@ -69,15 +69,25 @@ and [`server/Dockerfile`](../../server/Dockerfile). See
 - [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) — runs both suites
   plus the client production build (Node 24) on pushes to `main` and PRs.
 - [`.github/workflows/docker-image.yml`](../../.github/workflows/docker-image.yml) —
-  on a `v*` tag (or manual dispatch), builds and pushes both images to GHCR, injecting
-  version/commit/repo build args. Tags produced: the release tag and `latest-test`.
+  builds and pushes both images to GHCR on every push to `main` (`latest` + short
+  SHA tags) and on `v*` tags (version tag). A `v*` tag additionally publishes a
+  **GitHub Release** tied to the exact build commit, with image references pinned
+  to that version.
+- [`.github/workflows/deploy-demo.yml`](../../.github/workflows/deploy-demo.yml) —
+  publishes the backend-less demo to GitHub Pages on pushes touching `client/`.
 
 Both test workflows install with `npm ci` against the committed
 `package-lock.json` files (with setup-node's npm cache keyed on them), so
 installs are reproducible and lockfile changes must be committed alongside
 dependency changes.
 
-To cut a release, push a `v*` tag (e.g. `git tag v1.4 && git push --tags`).
+To cut a release, push a `v*` tag (e.g. `git tag v2.1.0 && git push origin v2.1.0`).
+The workflow builds the images, then creates the GitHub Release automatically.
+Deployments can pin a release by setting `HEARTHBOARD_VERSION=<tag>` in `.env`
+(defaults to `latest`).
+
+> Hearthboard's release lineage starts at **v2.0.0**. Earlier `v1.x` tags
+> belonged to the upstream HomeGlow project and were removed.
 
 ## Reverse proxy / HTTPS
 

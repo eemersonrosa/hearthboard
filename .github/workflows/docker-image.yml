@@ -99,3 +99,34 @@ jobs:
             BACKEND_GITHUB_REPOSITORY=${{ steps.buildmeta.outputs.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # On version tags, publish a GitHub Release tied to the exact commit the
+  # images were built from, with pull references pinned to this version.
+  release:
+    if: github.ref_type == 'tag'
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > notes.md <<EOF
+          Docker images built from \`${GITHUB_SHA}\`:
+
+          - \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/hearthboard-backend:${GITHUB_REF_NAME}\`
+          - \`ghcr.io/${GITHUB_REPOSITORY_OWNER}/hearthboard-frontend:${GITHUB_REF_NAME}\`
+
+          To pin a deployment to this release, set in your \`.env\` next to
+          \`docker-compose.yml\`:
+
+          \`\`\`env
+          HEARTHBOARD_VERSION=${GITHUB_REF_NAME}
+          \`\`\`
+          EOF
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Hearthboard ${GITHUB_REF_NAME}" \
+            --notes-file notes.md

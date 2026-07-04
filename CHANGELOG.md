@@ -1,6 +1,30 @@
-# Hearthboard v 1.3 Changelog
+# Hearthboard Changelog
 
-## 🎉 Recent Updates
+## v2.0.0 — First independent Hearthboard release
+
+Hearthboard's release lineage starts here. The project began as a derivative
+of HomeGlow (see [NOTICE](NOTICE)) but is developed independently going
+forward; the old upstream `v1.x` tags were removed. Each release from now on
+is published automatically with Docker images built from the release commit —
+pin one with `HEARTHBOARD_VERSION=<tag>` in your `.env`.
+
+Highlights in this release:
+
+- **Public repository + live demo**: the dashboard now has a backend-less
+  showcase at https://eemersonrosa.github.io/hearthboard/ running entirely
+  in the browser with sample data.
+- **Configuration backup**: Settings → Backup exports the entire
+  configuration (settings, tabs, widget layouts, users, chores, calendar and
+  photo sources) to a single file — optionally passphrase-encrypted — and
+  imports it on a fresh deployment. Stored secrets are re-encrypted for the
+  target machine automatically.
+- **Chore due-time sounds**, mobile-friendly phase 1, dock auto-hide by
+  default, Immich daily photo sampling, and the chores/calendar/HA features
+  listed below.
+
+---
+
+## v1.x era (pre-fork and early fork history)
 
 Welcome to the latest improvements for Hearthboard! We've been hard at work enhancing your smart home display experience with exciting new features and critical bug fixes.
 
