@@ -426,7 +426,7 @@ const TabBar = ({
                   }}
                 >
                   <img
-                    src="/HearthboardLogo.svg"
+                    src={`${import.meta.env.BASE_URL}HearthboardLogo.svg`}
                     alt="Hearthboard"
                     style={{
                       height: '32px',
