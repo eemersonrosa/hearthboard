@@ -7,6 +7,7 @@
 # You might also want to ignore node_modules and build outputs
 node_modules/
 dist/
+dist-demo/
 build/
 coverage/
 **/coverage/

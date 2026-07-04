@@ -9,6 +9,7 @@ licensed under the GNU Affero General Public License v3.0.
 Hearthboard is distributed under the same license (AGPL-3.0).
 See the LICENSE file for the full license text.
 
-This repository is private and not distributed publicly. If it is ever
-distributed or hosted for third-party network users, the AGPL-3.0 source
-availability obligations apply.
+This repository is publicly available at
+https://github.com/eemersonrosa/hearthboard. As required by AGPL-3.0, the
+complete corresponding source is available there, including for any hosted
+instances of the software.

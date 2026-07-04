@@ -8,7 +8,10 @@ no subscriptions, no cloud accounts, everything runs on your own hardware.
 
 > Hearthboard is a derivative work of
 > [HomeGlow](https://github.com/jherforth/HomeGlow) (AGPL-3.0). See [NOTICE](NOTICE).
-> This repository is private and not distributed.
+
+**[▶ Try the live demo](https://eemersonrosa.github.io/hearthboard/)** — the real
+dashboard running entirely in your browser with sample data (no backend, no
+account; changes reset on reload).
 
 ## Highlights
 

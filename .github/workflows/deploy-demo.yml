@@ -1,0 +1,55 @@
+# Builds the backend-less demo (VITE_DEMO_MODE=1, API mocked in-browser via
+# MSW) and publishes it to GitHub Pages at /hearthboard/.
+name: Deploy Demo to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+        working-directory: client
+      - name: Build demo bundle
+        run: npx vite build --outDir dist-demo --base=/hearthboard/
+        working-directory: client
+        env:
+          VITE_DEMO_MODE: '1'
+          VITE_REACT_APP_API_URL: ''
+      - name: SPA fallback
+        run: cp client/dist-demo/index.html client/dist-demo/404.html
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: client/dist-demo
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
