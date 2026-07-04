@@ -15,12 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      # package-lock.json is gitignored in this repo, so no npm cache key
+      # is available and npm ci cannot be used.
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: server/package-lock.json
-      - run: npm ci
+      - run: npm install
         working-directory: server
       - run: npm test
         working-directory: server
@@ -32,9 +32,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: client/package-lock.json
-      - run: npm ci
+      - run: npm install
         working-directory: client
       - run: npm test
         working-directory: client
