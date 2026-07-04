@@ -16,8 +16,6 @@ coverage/
 # sounds live in server/assets/ and ARE tracked; seeded copies land here.
 server/uploads/
 
-package-lock.json
-
 .vscode/
 
 # Local SQLite database (runtime data, initialized by migrations)
