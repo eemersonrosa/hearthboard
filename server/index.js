@@ -269,12 +269,55 @@ function decryptPassword(encryptedPassword) {
   }
 }
 
-// Initialize Fastify with CORS
-fastify.register(require('@fastify/cors'), {
-  origin: '*', // Allow all origins for development. Consider restricting in production.
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], // Explicitly allow PATCH
-  allowedHeaders: ['Content-Type', 'Authorization'], // Add any other headers your client might send
-});
+// No CORS: the client reaches the API same-origin (Nginx in production, the
+// Vite proxy in development), so other websites cannot read API responses.
+
+// A file name taken from the URL must stay inside its folder; Fastify decodes
+// %2F, so "..%2Fdata%2Ftasks.db" would otherwise escape it.
+function isPlainFilename(name) {
+  return typeof name === 'string' && name !== '' && name === path.basename(name) && name !== '.' && name !== '..';
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+// Admin PIN sessions. Verifying the PIN hands out a token; the admin panel
+// sends it back as X-Admin-Token on routes that expose or replace secrets,
+// plugins or the PIN itself. With no PIN configured these routes stay open.
+const ADMIN_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const adminTokens = new Map(); // token -> expiry (ms)
+
+function issueAdminToken() {
+  const now = Date.now();
+  for (const [token, expiry] of adminTokens) {
+    if (expiry <= now) adminTokens.delete(token);
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  adminTokens.set(token, now + ADMIN_TOKEN_TTL_MS);
+  return token;
+}
+
+async function requireAdmin(request, reply) {
+  if (!db.prepare('SELECT 1 FROM admin_pin WHERE id = 1').get()) return;
+  const expiry = adminTokens.get(request.headers['x-admin-token']);
+  if (expiry && expiry > Date.now()) return;
+  return reply.status(401).send({ error: 'Admin PIN required' });
+}
+
+function hashPin(pin) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  return `scrypt$${salt}$${crypto.scryptSync(pin, salt, 32).toString('hex')}`;
+}
+
+function checkPin(pin, stored) {
+  if (stored.startsWith('scrypt$')) {
+    const [, salt, hash] = stored.split('$');
+    return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), crypto.scryptSync(pin, salt, 32));
+  }
+  // Legacy unsalted SHA-256 hash; replaced with scrypt on the next successful verify.
+  return crypto.createHash('sha256').update(pin).digest('hex') === stored;
+}
 
 fastify.register(multipart, {
   limits: {
@@ -283,22 +326,12 @@ fastify.register(multipart, {
   },
 });
 
-// Add a preHandler hook to log all incoming requests
-fastify.addHook('preHandler', (request, reply, done) => {
-  console.log(`Incoming request: ${request.method} ${request.url}`);
-  done();
-});
-
 // Serve static files for uploads
 fastify.register(require('@fastify/static'), {
   root: path.join(__dirname, 'uploads'),
   prefix: '/Uploads/',
   decorateReply: false,
-  maxAge: 86400000, // 1 day cache
-  setHeaders: (res, path) => {
-    // Minimize headers to avoid "Request Header Fields Too Large" error
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-  }
+  maxAge: 86400000, // 1 day cache: Cache-Control: public, max-age=86400
 });
 
 // Additional static route specifically for user uploads
@@ -306,11 +339,7 @@ fastify.register(require('@fastify/static'), {
   root: path.join(__dirname, 'uploads', 'users'),
   prefix: '/Uploads/users/',
   decorateReply: false,
-  maxAge: 86400000, // 1 day cache
-  setHeaders: (res, path) => {
-    // Minimize headers to avoid "Request Header Fields Too Large" error
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-  }
+  maxAge: 86400000, // 1 day cache: Cache-Control: public, max-age=86400
 });
 
 // Serve static files for widgets
@@ -323,17 +352,13 @@ fastify.register(require('@fastify/static'), {
 // Add debugging for widget file requests
 fastify.get('/widgets/:filename', async (request, reply) => {
   const { filename } = request.params;
+  if (!isPlainFilename(filename)) {
+    return reply.status(400).send('Invalid widget filename');
+  }
   const filePath = path.join(__dirname, 'widgets', filename);
 
-  console.log(`Widget request for: ${filename}`);
-  console.log(`Looking for file at: ${filePath}`);
-
   try {
-    const stats = await fs.stat(filePath);
-    console.log(`File exists, size: ${stats.size} bytes`);
-
     let content = await fs.readFile(filePath, 'utf-8');
-    console.log(`File content preview: ${content.substring(0, 100)}...`);
 
     content = content.replace(/window\.location\.origin\.replace\(['"`]:\d+['"`],\s*['"`]:\d+['"`]\)/g, 'window.location.origin');
     content = content.replace(/\$\{window\.location\.protocol\}\/\/\$\{window\.location\.hostname\}:\d+/g, '${window.location.origin}');
@@ -352,7 +377,7 @@ fastify.get('/widgets/:filename', async (request, reply) => {
     return content;
   } catch (error) {
     console.error(`Error serving widget ${filename}:`, error);
-    reply.status(404).send(`Widget file not found: ${filename}`);
+    reply.status(404).send('Widget file not found');
   }
 });
 
@@ -543,7 +568,7 @@ async function saveWidgetRegistry(registry) {
 }
 
 // Endpoint: Upload a widget (HTML file)
-fastify.post('/api/widgets/upload', async (request, reply) => {
+fastify.post('/api/widgets/upload', { preHandler: requireAdmin }, async (request, reply) => {
   try {
     const data = await request.file();
     if (!data || !data.filename.endsWith('.html')) {
@@ -585,8 +610,11 @@ fastify.get('/api/widgets', async (request, reply) => {
 });
 
 // Endpoint: Delete a widget
-fastify.delete('/api/widgets/:filename', async (request, reply) => {
+fastify.delete('/api/widgets/:filename', { preHandler: requireAdmin }, async (request, reply) => {
   const { filename } = request.params;
+  if (!isPlainFilename(filename)) {
+    return reply.status(400).send({ error: 'Invalid widget filename.' });
+  }
   try {
     const filePath = path.join(__dirname, 'widgets', filename);
     await fs.unlink(filePath);
@@ -627,7 +655,7 @@ fastify.get('/api/sounds', async (request, reply) => {
 });
 
 // Endpoint: Upload a custom sound
-fastify.post('/api/sounds/upload', async (request, reply) => {
+fastify.post('/api/sounds/upload', { preHandler: requireAdmin }, async (request, reply) => {
   try {
     const data = await request.file();
     if (!data) {
@@ -657,8 +685,11 @@ fastify.post('/api/sounds/upload', async (request, reply) => {
 });
 
 // Endpoint: Delete an uploaded sound (bundled defaults are protected)
-fastify.delete('/api/sounds/:filename', async (request, reply) => {
+fastify.delete('/api/sounds/:filename', { preHandler: requireAdmin }, async (request, reply) => {
   const { filename } = request.params;
+  if (!isPlainFilename(filename)) {
+    return reply.status(400).send({ error: 'Invalid sound filename.' });
+  }
   try {
     if (getDefaultSoundFilenames().has(filename)) {
       return reply.status(400).send({ error: 'Default sounds cannot be deleted.' });
@@ -672,45 +703,6 @@ fastify.delete('/api/sounds/:filename', async (request, reply) => {
     }
     console.error('Error deleting sound:', error);
     reply.status(500).send({ error: 'Failed to delete sound.' });
-  }
-});
-
-// Debug endpoint to list widget files
-fastify.get('/api/widgets/debug', async (request, reply) => {
-  try {
-    const widgetsDir = path.join(__dirname, 'widgets');
-    console.log(`Checking widgets directory: ${widgetsDir}`);
-
-    const files = await fs.readdir(widgetsDir);
-    console.log(`Files in widgets directory:`, files);
-
-    const fileDetails = [];
-    for (const file of files) {
-      const filePath = path.join(widgetsDir, file);
-      try {
-        const stats = await fs.stat(filePath);
-        fileDetails.push({
-          name: file,
-          size: stats.size,
-          isFile: stats.isFile(),
-          modified: stats.mtime
-        });
-      } catch (err) {
-        fileDetails.push({
-          name: file,
-          error: err.message
-        });
-      }
-    }
-
-    return {
-      directory: widgetsDir,
-      files: fileDetails,
-      registry: await loadWidgetRegistry()
-    };
-  } catch (error) {
-    console.error('Error reading widgets directory:', error);
-    return { error: error.message };
   }
 });
 
@@ -802,12 +794,24 @@ fastify.get('/api/widgets/github', async (request, reply) => {
 });
 
 // Endpoint: Install a widget from GitHub repository
-fastify.post('/api/widgets/github/install', async (request, reply) => {
+fastify.post('/api/widgets/github/install', { preHandler: requireAdmin }, async (request, reply) => {
   try {
     const { download_url, filename, name } = request.body;
 
     if (!download_url || !filename) {
       return reply.status(400).send({ error: 'download_url and filename are required' });
+    }
+    let downloadHost;
+    try {
+      downloadHost = new URL(download_url);
+    } catch {
+      return reply.status(400).send({ error: 'download_url is not a valid URL' });
+    }
+    if (downloadHost.protocol !== 'https:' || downloadHost.hostname !== 'raw.githubusercontent.com') {
+      return reply.status(400).send({ error: 'Widgets can only be installed from raw.githubusercontent.com' });
+    }
+    if (!/\.html$/i.test(filename)) {
+      return reply.status(400).send({ error: 'Only HTML widget files can be installed' });
     }
 
     console.log(`Installing widget ${filename} from GitHub...`);
@@ -818,7 +822,9 @@ fastify.post('/api/widgets/github/install', async (request, reply) => {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'User-Agent': 'Hearthboard-Server/1.0'
       },
-      timeout: 15000
+      timeout: 15000,
+      maxRedirects: 0,
+      responseType: 'text',
     });
 
     // Sanitize filename
@@ -2008,7 +2014,9 @@ fastify.patch('/api/users/:id', async (request, reply) => {
 fastify.post('/api/users/:id/upload-picture', async (request, reply) => {
   try {
     const { id } = request.params;
-    console.log(`Upload picture request for user ${id}`);
+    if (!/^\d+$/.test(id)) {
+      return reply.status(400).send({ error: 'Invalid user id' });
+    }
 
     const data = await request.file();
 
@@ -2020,8 +2028,11 @@ fastify.post('/api/users/:id/upload-picture', async (request, reply) => {
     console.log('File received:', data.filename, 'Type:', data.mimetype);
 
     // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-    if (!allowedTypes.includes(data.mimetype)) {
+    // The extension comes from the checked type, never the upload's name, so a
+    // "photo.html" cannot be served back as a page.
+    const extensionsByType = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/gif': 'gif' };
+    const fileExtension = extensionsByType[data.mimetype];
+    if (!fileExtension) {
       console.log('Invalid file type:', data.mimetype);
       return reply.status(400).send({ error: 'Only image files (JPEG, PNG, GIF) are allowed' });
     }
@@ -2031,7 +2042,6 @@ fastify.post('/api/users/:id/upload-picture', async (request, reply) => {
     await fs.mkdir(usersDir, { recursive: true });
 
     // Generate unique filename
-    const fileExtension = data.filename.split('.').pop();
     const filename = `user_${id}_${Date.now()}.${fileExtension}`;
     const filepath = path.join(usersDir, filename);
 
@@ -2198,31 +2208,28 @@ fastify.post('/api/settings/search', async (request, reply) => {
   }
 });
 
-fastify.post('/api/settings', async (request, reply) => {
+// The photo widget saves its own display options from the dashboard; every
+// other setting (API keys, proxy whitelist, Home Assistant and Google config)
+// is admin-only.
+async function requireAdminForSetting(request, reply) {
+  const key = request.body && request.body.key;
+  if (typeof key === 'string' && key.startsWith('PHOTO_WIDGET_')) return;
+  return requireAdmin(request, reply);
+}
+
+fastify.post('/api/settings', { preHandler: requireAdminForSetting }, async (request, reply) => {
   const { key, value } = request.body;
-  // single log message showing the details of the save:
-  console.log(`=== SAVING SETTING === Key: ${key} - Value: ${value} Value type: ${typeof value} Value length: ${value ? value.length : 'null/undefined'}`);
 
   if (!key || value === undefined) {
-    console.log('ERROR: Missing key or value');
     return reply.status(400).send({ error: 'Key and value are required.' });
+  }
+  if (homeAssistant.SECRET_SETTING_KEYS.includes(key)) {
+    return reply.status(400).send({ error: 'Use the Home Assistant connection settings to change the token.' });
   }
   try {
     // Use INSERT OR REPLACE to either insert a new setting or update an existing one
     const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-    const result = stmt.run(key, value);
-    console.log('Database insert result:', result);
-
-    // Verify the setting was saved
-    const verification = db.prepare('SELECT key, value FROM settings WHERE key = ?').get(key);
-    console.log('Verification query result:', verification);
-
-    // Special verification for weather API key
-    if (key === 'WEATHER_API_KEY') {
-      console.log('=== WEATHER API KEY VERIFICATION ===');
-      console.log('Saved value in DB:', verification ? verification.value : 'NOT FOUND');
-      console.log('Value matches input?', verification && verification.value === value);
-    }
+    stmt.run(key, value);
 
     return { success: true, message: `Setting '${key}' saved successfully.` };
   } catch (error) {
@@ -2251,7 +2258,6 @@ const CONFIG_EXPORT_TABLES = [
   'calendar_sync_status',
   'photo_sources',
   'settings',
-  'admin_pin',
 ];
 
 const PHOTO_SOURCE_SECRET_COLUMNS = ['api_key', 'password', 'refresh_token'];
@@ -2343,7 +2349,7 @@ function decryptConfigPayload(file, passphrase) {
   return decrypted.toString('utf8');
 }
 
-fastify.post('/api/config/export', async (request, reply) => {
+fastify.post('/api/config/export', { preHandler: requireAdmin }, async (request, reply) => {
   const { encrypt = false, passphrase = '' } = request.body || {};
   if (encrypt && (typeof passphrase !== 'string' || passphrase.length < 4)) {
     return reply.status(400).send({ error: 'A passphrase of at least 4 characters is required to encrypt the export.' });
@@ -2368,7 +2374,7 @@ fastify.post('/api/config/export', async (request, reply) => {
   }
 });
 
-fastify.post('/api/config/import', { bodyLimit: 25 * 1024 * 1024 }, async (request, reply) => {
+fastify.post('/api/config/import', { bodyLimit: 25 * 1024 * 1024, preHandler: requireAdmin }, async (request, reply) => {
   const { file, passphrase = '' } = request.body || {};
   if (!file || typeof file !== 'object' || file.type !== CONFIG_EXPORT_TYPE) {
     return reply.status(400).send({ error: 'Not a valid Hearthboard configuration export file.' });
@@ -2978,18 +2984,12 @@ fastify.post('/api/test-api-key', async (request, reply) => {
 
 // NEW: Generic CORS Proxy Endpoint
 fastify.get('/api/proxy', async (request, reply) => {
-  console.log('=== PROXY REQUEST RECEIVED ===');
-  console.log('Query params:', request.query);
-  console.log('Headers:', request.headers);
-
   const { targetUrl } = request.query;
 
   if (!targetUrl) {
     console.log('ERROR: No targetUrl provided');
     return reply.status(400).send({ error: 'targetUrl query parameter is required.' });
   }
-
-  console.log('Target URL requested:', targetUrl);
 
   let whitelist = [];
   try {
@@ -3031,39 +3031,24 @@ fastify.get('/api/proxy', async (request, reply) => {
         'Accept': 'application/json, text/plain, */*',
         'Accept-Encoding': 'gzip, deflate'
       },
-      maxRedirects: 5,
+      // The whitelist only checks the first URL, so redirects are not followed.
+      maxRedirects: 0,
       validateStatus: function (status) {
         return status < 500; // Resolve only if the status code is less than 500
       }
     };
 
-    // For HTTP requests, ensure we don't have HTTPS-specific configurations
-    if (target.protocol === 'http:') {
-      console.log('Making HTTP request (not HTTPS)');
-      // No special HTTPS agent needed for HTTP
-    } else {
-      console.log('Making HTTPS request');
-      // For HTTPS, we might need to handle self-signed certificates
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // Only for development
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+      return reply.status(400).send({ error: 'Only http and https URLs can be proxied.' });
     }
 
-    console.log('Making axios request with config:', axiosConfig);
     const response = await axios.get(targetUrl, axiosConfig);
-    console.log('Axios response received:', response.status, response.statusText);
-    console.log('Response data type:', typeof response.data);
-    console.log('Response data preview:', JSON.stringify(response.data).substring(0, 200) + '...');
 
     // Forward the content type and the data from the external API
     if (response.headers['content-type']) {
       reply.header('Content-Type', response.headers['content-type']);
     }
 
-    // Add CORS headers
-    reply.header('Access-Control-Allow-Origin', '*');
-    reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    console.log('Sending successful response');
     return reply.status(response.status).send(response.data);
 
   } catch (error) {
@@ -3130,7 +3115,7 @@ fastify.get('/api/homeassistant/status', async (request, reply) => {
   }
 });
 
-fastify.post('/api/homeassistant/config', async (request, reply) => {
+fastify.post('/api/homeassistant/config', { preHandler: requireAdmin }, async (request, reply) => {
   try {
     const { base_url, token, weather_entity } = request.body || {};
     homeAssistant.saveConfig(db, {
@@ -3253,7 +3238,7 @@ fastify.get('/api/connections/google/status', async (request, reply) => {
   }
 });
 
-fastify.post('/api/connections/google/config', async (request, reply) => {
+fastify.post('/api/connections/google/config', { preHandler: requireAdmin }, async (request, reply) => {
   try {
     if (!isEncryptionConfigured()) {
       return reply.status(400).send({ error: 'ENCRYPTION_KEY is not configured on the server.' });
@@ -3301,7 +3286,7 @@ fastify.get('/api/connections/google/callback', async (request, reply) => {
 h1{margin:0 0 12px;font-size:22px;color:${ok ? '#4ade80' : '#f87171'}}p{margin:0;color:#cbd5e1;line-height:1.5}
 button{margin-top:20px;background:#2563eb;color:#fff;border:0;padding:10px 18px;border-radius:8px;font-size:14px;cursor:pointer}
 button:hover{background:#1d4ed8}</style></head>
-<body><div class="card"><h1>${title}</h1><p>${message}</p>
+<body><div class="card"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>
 <button onclick="window.close()">Close window</button>
 <script>try{window.opener&&window.opener.postMessage({type:'hearthboard:google-oauth',ok:${ok ? 'true' : 'false'}},'*');}catch(e){}</script>
 </div></body></html>`;
@@ -3417,7 +3402,7 @@ fastify.delete('/api/calendar-sources/:id/events/:eventId', async (request, repl
   }
 });
 
-fastify.delete('/api/connections/google/account', async (request, reply) => {
+fastify.delete('/api/connections/google/account', { preHandler: requireAdmin }, async (request, reply) => {
   try {
     const account = googleConnection.getConnectedAccount(db);
     if (!account) {
@@ -3515,6 +3500,10 @@ fastify.patch('/api/calendar-sources/:id', async (request, reply) => {
       updateValues.push(type);
     }
     if (url !== undefined) { updateFields.push('url = ?'); updateValues.push(url); }
+    // A stored password is only ever sent to the server it was entered for.
+    if (url !== undefined && url !== existing.url && !password) {
+      updateFields.push('password = NULL');
+    }
     if (username !== undefined) { updateFields.push('username = ?'); updateValues.push(username || null); }
     if (password !== undefined && password !== '') {
       const encryptedPassword = encryptPassword(password);
@@ -3781,6 +3770,11 @@ fastify.patch('/api/photo-sources/:id', async (request, reply) => {
       updateValues.push(type);
     }
     if (url !== undefined) { updateFields.push('url = ?'); updateValues.push(url || null); }
+    // Stored credentials are only ever sent to the server they were entered for.
+    if (url !== undefined && (url || null) !== existing.url) {
+      if (!api_key) updateFields.push('api_key = NULL');
+      if (!password) updateFields.push('password = NULL');
+    }
     if (api_key !== undefined && api_key !== '') {
       const encryptedApiKey = encryptPassword(api_key);
       updateFields.push('api_key = ?');
@@ -3915,6 +3909,9 @@ fastify.post('/api/photo-sources/:id/test', async (request, reply) => {
 fastify.get('/api/photo-proxy/:sourceId/:assetId', async (request, reply) => {
   const { sourceId, assetId } = request.params;
   const { size = 'preview' } = request.query;
+  if (!/^[\w-]+$/.test(assetId) || !/^\w+$/.test(size)) {
+    return reply.status(400).send({ error: 'Invalid photo request' });
+  }
 
   try {
     const source = db.prepare('SELECT * FROM photo_sources WHERE id = ?').get(sourceId);
@@ -3989,6 +3986,11 @@ fastify.get('/api/photo-sources/:sourceId/uploaded/:photoId/file', async (reques
 });
 
 // Hearthboard Photos - upload one or more photos (multipart)
+// Stored extension follows the image type so an uploaded ".html" is never served as a page.
+const PHOTO_EXTENSIONS_BY_TYPE = {
+  'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp',
+  'image/heic': '.heic', 'image/heif': '.heif', 'image/avif': '.avif', 'image/bmp': '.bmp',
+};
 fastify.post('/api/photo-sources/:sourceId/uploaded', async (request, reply) => {
   const { sourceId } = request.params;
   try {
@@ -4010,7 +4012,7 @@ fastify.post('/api/photo-sources/:sourceId/uploaded', async (request, reply) => 
         continue;
       }
       try {
-        const ext = path.extname(part.filename || '') || '.jpg';
+        const ext = PHOTO_EXTENSIONS_BY_TYPE[part.mimetype] || '.jpg';
         const safeBase = crypto.randomBytes(12).toString('hex');
         const filename = `${safeBase}${ext.toLowerCase()}`;
         const filePath = path.join(uploadDir, filename);
@@ -4410,7 +4412,8 @@ fastify.get('/api/admin-pin/exists', async (request, reply) => {
   }
 });
 
-fastify.post('/api/admin-pin/set', async (request, reply) => {
+// Changing an existing PIN needs the admin token (requireAdmin passes when none is set).
+fastify.post('/api/admin-pin/set', { preHandler: requireAdmin }, async (request, reply) => {
   const { pin } = request.body;
 
   if (!pin || typeof pin !== 'string') {
@@ -4426,7 +4429,7 @@ fastify.post('/api/admin-pin/set', async (request, reply) => {
   }
 
   try {
-    const pinHash = crypto.createHash('sha256').update(pin).digest('hex');
+    const pinHash = hashPin(pin);
     const existingPin = db.prepare('SELECT id FROM admin_pin WHERE id = 1').get();
 
     if (existingPin) {
@@ -4437,16 +4440,17 @@ fastify.post('/api/admin-pin/set', async (request, reply) => {
       stmt.run(pinHash);
     }
 
-    return { success: true, message: 'PIN set successfully' };
+    return { success: true, message: 'PIN set successfully', token: issueAdminToken() };
   } catch (error) {
     console.error('Error setting PIN:', error);
     reply.status(500).send({ error: 'Failed to set PIN' });
   }
 });
 
-fastify.delete('/api/admin-pin', async (request, reply) => {
+fastify.delete('/api/admin-pin', { preHandler: requireAdmin }, async (request, reply) => {
   try {
     db.prepare('DELETE FROM admin_pin WHERE id = 1').run();
+    adminTokens.clear();
     return { success: true, message: 'PIN cleared successfully' };
   } catch (error) {
     console.error('Error clearing PIN:', error);
@@ -4454,11 +4458,21 @@ fastify.delete('/api/admin-pin', async (request, reply) => {
   }
 });
 
+// Five wrong PINs lock verification for a minute, so a 4-digit PIN cannot be
+// guessed by script. One counter for the whole server is enough for a household.
+const PIN_MAX_FAILURES = 5;
+const PIN_LOCKOUT_MS = 60 * 1000;
+let pinFailures = 0;
+let pinLockedUntil = 0;
+
 fastify.post('/api/admin-pin/verify', async (request, reply) => {
-  const { pin } = request.body;
+  const { pin } = request.body || {};
 
   if (!pin || typeof pin !== 'string') {
     return reply.status(400).send({ error: 'PIN is required' });
+  }
+  if (Date.now() < pinLockedUntil) {
+    return reply.status(429).send({ error: 'Too many wrong PINs. Try again in a minute.' });
   }
 
   try {
@@ -4468,10 +4482,20 @@ fastify.post('/api/admin-pin/verify', async (request, reply) => {
       return reply.status(404).send({ error: 'No PIN configured' });
     }
 
-    const pinHash = crypto.createHash('sha256').update(pin).digest('hex');
-    const isValid = pinHash === storedPin.pin_hash;
+    if (!checkPin(pin, storedPin.pin_hash)) {
+      pinFailures += 1;
+      if (pinFailures >= PIN_MAX_FAILURES) {
+        pinFailures = 0;
+        pinLockedUntil = Date.now() + PIN_LOCKOUT_MS;
+      }
+      return { valid: false };
+    }
 
-    return { valid: isValid };
+    pinFailures = 0;
+    if (!storedPin.pin_hash.startsWith('scrypt$')) {
+      db.prepare('UPDATE admin_pin SET pin_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1').run(hashPin(pin));
+    }
+    return { valid: true, token: issueAdminToken() };
   } catch (error) {
     console.error('Error verifying PIN:', error);
     reply.status(500).send({ error: 'Failed to verify PIN' });

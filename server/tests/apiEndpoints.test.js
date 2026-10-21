@@ -702,3 +702,94 @@ test('chore schedule rejects an invalid due_time', async () => {
     assert.equal(createRes.status, 400);
     assert.match(createRes.body.error, /due_time/);
 });
+
+test('file routes reject names that climb out of their folder', async () => {
+    const packageJson = path.join(serverDir, 'package.json');
+    const before = fs.readFileSync(packageJson, 'utf8');
+
+    const read = await api('/widgets/..%2Fpackage.json');
+    assert.equal(read.status, 400);
+    assert.doesNotMatch(String(read.body), /hearthboard-server/);
+
+    for (const route of ['/api/widgets/..%2Fpackage.json', '/api/sounds/..%2F..%2Fpackage.json']) {
+        const { status } = await api(route, { method: 'DELETE' });
+        assert.equal(status, 400, route);
+    }
+    assert.equal(fs.readFileSync(packageJson, 'utf8'), before);
+});
+
+test('API sends no CORS headers, so other websites cannot read responses', async () => {
+    const { headers } = await api('/api/settings', {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://evil.example', 'Access-Control-Request-Method': 'POST' },
+    });
+    assert.equal(headers.get('access-control-allow-origin'), null);
+});
+
+test('google oauth callback escapes the error text it echoes', async () => {
+    const { body } = await api('/api/connections/google/callback?error=%3Cscript%3Ealert(1)%3C%2Fscript%3E');
+    assert.doesNotMatch(body, /<script>alert/);
+    assert.match(body, /&lt;script&gt;/);
+});
+
+test('changing a photo source URL drops the stored API key', async () => {
+    const created = await api('/api/photo-sources', {
+        method: 'POST',
+        body: JSON.stringify({ name: 'Immich', type: 'Immich', url: 'https://immich.example', api_key: 'secret-key' }),
+    });
+    assert.ok([200, 201].includes(created.status), JSON.stringify(created.body));
+    const id = created.body.id;
+
+    const patched = await api(`/api/photo-sources/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ url: 'https://attacker.example' }),
+    });
+    assert.equal(patched.status, 200);
+
+    const exported = await api('/api/config/export', { method: 'POST', body: '{}' });
+    const row = exported.body.data.photo_sources.find((r) => r.id === id);
+    assert.equal(row.url, 'https://attacker.example');
+    assert.equal(row.api_key, null);
+});
+
+// Runs last: it sets a PIN, which gates admin routes for any later test.
+test('admin PIN is enforced by the server and never exported', async () => {
+    const set = await api('/api/admin-pin/set', { method: 'POST', body: JSON.stringify({ pin: '4321' }) });
+    assert.equal(set.status, 200);
+    assert.ok(set.body.token);
+
+    for (const [route, method] of [
+        ['/api/config/export', 'POST'],
+        ['/api/admin-pin', 'DELETE'],
+        ['/api/admin-pin/set', 'POST'],
+        ['/api/widgets/x.html', 'DELETE'],
+    ]) {
+        const { status } = await api(route, { method, body: JSON.stringify({ pin: '1111' }) });
+        assert.equal(status, 401, `${method} ${route} without token`);
+    }
+    const blockedSetting = await api('/api/settings', { method: 'POST', body: JSON.stringify({ key: 'PROXY_WHITELIST', value: 'evil.example' }) });
+    assert.equal(blockedSetting.status, 401);
+    const photoSetting = await api('/api/settings', { method: 'POST', body: JSON.stringify({ key: 'PHOTO_WIDGET_INTERVAL', value: '5000' }) });
+    assert.equal(photoSetting.status, 200);
+
+    const wrong = await api('/api/admin-pin/verify', { method: 'POST', body: JSON.stringify({ pin: '0000' }) });
+    assert.equal(wrong.body.valid, false);
+    assert.equal(wrong.body.token, undefined);
+
+    const verify = await api('/api/admin-pin/verify', { method: 'POST', body: JSON.stringify({ pin: '4321' }) });
+    assert.equal(verify.body.valid, true);
+    const auth = { 'X-Admin-Token': verify.body.token };
+
+    const exported = await api('/api/config/export', { method: 'POST', headers: auth, body: '{}' });
+    assert.equal(exported.status, 200);
+    assert.equal(exported.body.data.admin_pin, undefined);
+
+    for (let i = 0; i < 5; i += 1) {
+        await api('/api/admin-pin/verify', { method: 'POST', body: JSON.stringify({ pin: '9999' }) });
+    }
+    const locked = await api('/api/admin-pin/verify', { method: 'POST', body: JSON.stringify({ pin: '4321' }) });
+    assert.equal(locked.status, 429);
+
+    const cleared = await api('/api/admin-pin', { method: 'DELETE', headers: auth });
+    assert.equal(cleared.status, 200);
+});

@@ -93,7 +93,7 @@ the system, and the technology choices.
 | Decision | Why | Consequence for contributors |
 | --- | --- | --- |
 | Per-device config keyed by a `localStorage` UUID | Multiple physical displays share one backend but each shows a different layout | There is no "global" layout; test with a known device name. Clearing browser storage creates a *new* device. |
-| No authentication, optional Admin PIN only | Designed for trusted LAN / kiosk use | Never expose to the internet without a reverse proxy + your own auth. See the [security note](../../README.md#-security). |
+| No authentication, optional Admin PIN only | Designed for trusted LAN / kiosk use | Never expose to the internet without a reverse proxy + your own auth. See the [security notes](../reference/configuration.md#security-notes). |
 | Single-file backend | Simplicity for a small project | Use the route-group map in the [Backend Reference](../reference/backend-api.md) to navigate; grep by path prefix. |
 | Settings stored as JSON blobs (`device_settings_json`, `config_json`) | Flexible, schema-light per-device data | Reads/writes go through `parseJsonObject`/merge helpers, not columns. |
 | Credentials encrypted at rest (AES-256-CBC) | Protect CalDAV/Google secrets in the DB | Requires a stable `ENCRYPTION_KEY`; changing it invalidates stored secrets. |
@@ -106,7 +106,7 @@ the system, and the technology choices.
 | Frontend framework | React 19, Vite 8 |
 | UI / styling | MUI v9, Emotion, CSS variables, `react-grid-layout`, `react-rnd`, `hammerjs` (touch), `recharts` (graphs), `react-big-calendar` |
 | Frontend tests | Vitest + `@vitest/coverage-v8` |
-| Backend framework | Fastify 5 (`@fastify/cors`, `@fastify/static`, `@fastify/multipart`) |
+| Backend framework | Fastify 5 (`@fastify/static`, `@fastify/multipart`) |
 | Database | SQLite via `better-sqlite3` |
 | Scheduling | `node-cron`, `cron-parser` |
 | Calendar | `node-ical`, `ical.js`, `ical-generator`, CalDAV, Google Calendar API |

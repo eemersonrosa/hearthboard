@@ -24,6 +24,33 @@ Highlights in this release:
 
 ---
 
+## Unreleased — security fixes (2026-10-20)
+
+- **Breaking for API clients:** with an Admin PIN set, the server now enforces
+  it. Admin-only routes need the `X-Admin-Token` returned by PIN verify; the
+  Admin Panel handles this. PINs are stored with scrypt (old hashes upgrade on
+  the next unlock) and five wrong tries lock entry for a minute.
+- Widget and sound file routes reject names like `..%2Fdata%2Ftasks.db`, which
+  could read or delete files outside their folder when the backend was
+  reached directly (the default Nginx front end already blocked it).
+- The proxy no longer turns off TLS certificate checks for the whole server
+  and no longer follows redirects past its whitelist.
+- CORS headers removed; the client is always same-origin.
+- Config export no longer includes the admin PIN hash.
+- Changing a photo/calendar source URL clears its stored key/password, so
+  saved credentials are never sent to a new server.
+- Uploaded images get their extension from the image type (an upload named
+  `.html` can no longer be served as a page); the Google sign-in page escapes
+  the error text it shows; GitHub widget installs only accept
+  `raw.githubusercontent.com` HTML files.
+- Images are published only after the test workflow passes; duplicate
+  `ci-tests.yml` removed. Dependencies updated: `npm audit` reports 0
+  vulnerabilities for server and client.
+- Removed `/api/widgets/debug` and logging of request headers, setting values
+  and widget contents.
+
+---
+
 ## v1.x era (pre-fork and early fork history)
 
 Welcome to the latest improvements for Hearthboard! We've been hard at work enhancing your smart home display experience with exciting new features and critical bug fixes.

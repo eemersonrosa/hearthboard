@@ -32,7 +32,7 @@ restart, delete `server/data/.encryption-key`.
 ### Build-time — frontend (Vite, baked into the bundle)
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `VITE_REACT_APP_API_URL` | same-origin (prod) / `http://localhost:5001` (dev) | API base URL. Empty in prod means "use the current origin" (Nginx proxies `/api`). |
+| `VITE_REACT_APP_API_URL` | `http://localhost:5001` | Dev only: where the Vite dev proxy forwards `/api`, `/widgets` and `/Uploads`. The client itself always calls the current origin. |
 | `VITE_OPENWEATHER_API_KEY` | — | Optional default weather key baked in at build time. |
 | `VITE_APP_VERSION`, `VITE_GIT_COMMIT`, `VITE_GITHUB_REPOSITORY` | build metadata | Version display. |
 
@@ -81,6 +81,9 @@ the chore widget, stored as `choreWidgetSettings.soundEnabled` in that device's
 
 - Hearthboard has **no authentication** beyond the optional Admin PIN. Do not expose it
   directly to the internet.
+- Set an Admin PIN: the server then refuses to export secrets, change
+  integrations or install plugins without it. Plugins run with full access to
+  the dashboard, so only install widgets you trust.
 - For HTTPS / a custom domain, put it behind a reverse proxy (Nginx, Traefik,
   Cloudflare Tunnel, etc.) and add your own access control.
 - Keep `ENCRYPTION_KEY` secret and stable.

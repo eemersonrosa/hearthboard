@@ -83,7 +83,7 @@ custom properties.
 
 | Module | Role |
 | --- | --- |
-| `apiConfig.js` | Resolves `API_BASE_URL` (dev: `VITE_REACT_APP_API_URL` or `localhost:5001`; prod: same-origin). |
+| `apiConfig.js` | `API_BASE_URL` — always same-origin (Nginx or the Vite dev proxy forwards to the backend). |
 | `deviceName.js` | Generate/read/persist the per-device UUID and build the device API base. |
 | `timezone.js` | Fetch and cache the server timezone (`initTimezone`, `getServerTimezoneSync`) so client date math matches the backend. |
 | `choreHelpers.js` | Cron/day-of-week helpers, "should this chore show today", today's date string in server TZ. |

@@ -33,7 +33,7 @@ async function pickerFetch(db, accountId, method, pathAndQuery, body) {
         init.headers['Content-Type'] = 'application/json';
         init.body = JSON.stringify(body);
     }
-    const res = await fetch(url, init);
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
     if (res.status === 204) return {};
     const text = await res.text();
     let parsed = null;
@@ -83,6 +83,7 @@ async function downloadMedia(db, accountId, sourceId, pickedItem) {
     const fullUrl = `${mediaFile.baseUrl}=d`;
     const res = await fetch(fullUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(60000),
     });
     if (!res.ok) {
         throw new Error(`Failed to download picked media (${res.status})`);

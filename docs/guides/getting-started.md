@@ -37,9 +37,9 @@ VITE_REACT_APP_API_URL=http://localhost:5001
 VITE_OPENWEATHER_API_KEY=your_openweather_api_key_here
 ```
 
-> **Port note:** the client's dev default expects the backend on **5001**
-> (`apiConfig.js` falls back to `http://localhost:5001` in dev). Set `PORT=5001` in
-> `server/.env` to match, or point `VITE_REACT_APP_API_URL` wherever your backend runs.
+> **Port note:** the Vite dev proxy forwards to the backend on **5001** by default.
+> Set `PORT=5001` in `server/.env` to match, or point `VITE_REACT_APP_API_URL` wherever
+> your backend runs.
 
 ### 3. Run both servers
 ```bash

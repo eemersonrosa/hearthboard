@@ -160,7 +160,7 @@ new machine or keep a restorable snapshot.
 
 - **What's included:** global settings, devices, tabs, widget layouts and sizes,
   users, chores, schedules, history, manual calendar events, calendar and photo
-  sources, and the admin PIN hash.
+  sources. The admin PIN is left out on purpose; set it again after import.
 - **What's not:** uploaded files (photos, sounds, avatars, plugin widget HTML)
   and linked Google accounts (OAuth tokens can't move between machines —
   re-link on the new host).

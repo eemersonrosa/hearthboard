@@ -1619,7 +1619,9 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
   const handlePinVerify = async (pin) => {
     try {
       if (pinModal.mode === 'set') {
-        await axios.post(`${API_BASE_URL}/api/admin-pin/set`, { pin });
+        const response = await axios.post(`${API_BASE_URL}/api/admin-pin/set`, { pin });
+        // The server requires this token on admin-only routes for the rest of the session.
+        axios.defaults.headers.common['X-Admin-Token'] = response.data.token;
         setPinExists(true);
         setIsAuthenticated(true);
         setPinModal({ open: false, mode: 'verify', title: '' });
@@ -1628,6 +1630,7 @@ const AdminPanel = ({ setWidgetSettings, onPluginsChanged, onTabsChanged }) => {
       } else {
         const response = await axios.post(`${API_BASE_URL}/api/admin-pin/verify`, { pin });
         if (response.data.valid) {
+          axios.defaults.headers.common['X-Admin-Token'] = response.data.token;
           setIsAuthenticated(true);
           setPinModal({ open: false, mode: 'verify', title: '' });
         } else {

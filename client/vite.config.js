@@ -85,6 +85,16 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/uploads': {
+        target: process.env.VITE_REACT_APP_API_URL || 'http://localhost:5001',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/widgets': {
+        target: process.env.VITE_REACT_APP_API_URL || 'http://localhost:5001',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 });
