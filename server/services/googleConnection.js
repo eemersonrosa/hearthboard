@@ -135,6 +135,7 @@ async function exchangeCodeForTokens(db, { code, redirectUri }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
+        signal: AbortSignal.timeout(15000),
     });
 
     if (!res.ok) {
@@ -147,6 +148,7 @@ async function exchangeCodeForTokens(db, { code, redirectUri }) {
 async function fetchUserInfo(accessToken) {
     const res = await fetch(USERINFO_ENDPOINT, {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {
         const errText = await res.text();
@@ -211,6 +213,7 @@ async function refreshAccessToken(db, accountId) {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
+        signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {
         const errText = await res.text();
@@ -247,7 +250,7 @@ async function revokeAndDisconnect(db, accountId) {
     }
     for (const token of tokens) {
         try {
-            await fetch(`${REVOKE_ENDPOINT}?token=${encodeURIComponent(token)}`, { method: 'POST' });
+            await fetch(`${REVOKE_ENDPOINT}?token=${encodeURIComponent(token)}`, { method: 'POST', signal: AbortSignal.timeout(15000) });
         } catch (err) {
             console.warn('Failed to revoke Google token:', err.message);
         }

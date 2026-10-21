@@ -66,6 +66,5 @@ where possible.
 ## Debugging
 
 - Browser console inside the iframe shows widget JS errors.
-- **Admin Panel → Plugins → Debug** and `GET /api/widgets/debug` list the files on
-  disk and the registry contents.
+- `GET /api/widgets` lists the registry contents.
 - Toggle the theme param in the URL to check theming.

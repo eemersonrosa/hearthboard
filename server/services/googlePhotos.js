@@ -16,7 +16,7 @@ async function googleFetch(db, accountId, method, pathAndQuery, body) {
         init.headers['Content-Type'] = 'application/json';
         init.body = JSON.stringify(body);
     }
-    const res = await fetch(url, init);
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
     const text = await res.text();
     let parsed = null;
     if (text) {

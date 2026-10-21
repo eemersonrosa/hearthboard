@@ -1,8 +1,4 @@
-export const getApiUrl = () => {
-  if (import.meta.env.MODE === 'development') {
-    return import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:5001';
-  }
-  return import.meta.env.VITE_REACT_APP_API_URL || '';
-};
-
-export const API_BASE_URL = getApiUrl();
+// Always same-origin: Nginx (production) or the Vite dev proxy forwards /api,
+// /widgets and /Uploads to the backend, which sends no CORS headers.
+// VITE_REACT_APP_API_URL only sets where the Vite dev proxy points.
+export const API_BASE_URL = '';

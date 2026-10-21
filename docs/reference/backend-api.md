@@ -39,10 +39,18 @@ server/
 
 ## Cross-cutting behavior
 
-- **CORS**: wide open (`origin: '*'`) — intended for LAN/kiosk use. Methods
-  include `PATCH`. Tighten this if you expose the backend.
+- **No CORS headers**: the client calls the API same-origin (Nginx in
+  production, the Vite proxy in development), so other websites cannot read
+  API responses.
+- **Admin PIN**: when a PIN is set, `POST /api/admin-pin/verify` (and `/set`)
+  return a session `token` (valid 12 h, in memory — a restart signs everyone
+  out). Admin-only routes require it in an `X-Admin-Token` header and answer
+  `401` without it: PIN set/delete, config export/import, plugin upload/
+  install/delete, sound upload/delete, `POST /api/settings` (except
+  `PHOTO_WIDGET_*` keys), Home Assistant config, and Google config/disconnect.
+  Five wrong PINs lock verification for one minute (`429`). With no PIN set,
+  these routes are open.
 - **Multipart uploads**: 25 MB/file, up to 50 files (`@fastify/multipart`).
-- **Request logging**: a `preHandler` hook logs every incoming request.
 - **Conditional caching**: several device endpoints use ETag-based `304` handling
   via `sendJsonWithConditionalCache`.
 - **Static serving**: `/Uploads/`, `/Uploads/users/`, and `/widgets/` are served
@@ -86,7 +94,6 @@ segment (the browser's `localStorage` UUID).
 | POST | `/api/widgets/upload` | Upload an HTML widget. |
 | GET | `/api/widgets` | List installed widgets (registry). |
 | DELETE | `/api/widgets/:filename` | Delete a widget. |
-| GET | `/api/widgets/debug` | Inspect the widgets directory + registry. |
 | GET | `/api/widgets/github` | List widgets available in the `HearthboardPlugins` GitHub repo. |
 | POST | `/api/widgets/github/install` | Install a widget from GitHub. |
 | GET | `/widgets/:filename` | Serve a widget's HTML (theme-aware, sandboxed). |
@@ -159,12 +166,12 @@ static route.
 | GET/POST | `/api/settings` | Read / write global settings (weather key, weather source, ICS URL). Home Assistant token keys are never returned. |
 | POST | `/api/settings/search` | Look up specific settings. |
 | POST | `/api/test-api-key` | Validate an OpenWeatherMap key. |
-| GET | `/api/proxy` | Generic CORS proxy (used by widgets/integrations). |
+| GET | `/api/proxy` | Generic CORS proxy (used by widgets/integrations). Only hosts in `PROXY_WHITELIST`; redirects are not followed. |
 
 ### Configuration backup
 | Method | Path | Purpose |
 | --- | --- | --- |
-| POST | `/api/config/export` | Export the full configuration (settings, devices, tabs, users, chores, calendar/photo sources, admin PIN) as one JSON envelope. Stored secrets are decrypted for portability. Body `{ encrypt, passphrase }`; when `encrypt` is true the payload is scrypt + AES-256-GCM encrypted with the passphrase. |
+| POST | `/api/config/export` | Export the full configuration (settings, devices, tabs, users, chores, calendar/photo sources) as one JSON envelope. The admin PIN is not exported. Stored secrets are decrypted for portability. Body `{ encrypt, passphrase }`; when `encrypt` is true the payload is scrypt + AES-256-GCM encrypted with the passphrase. |
 | POST | `/api/config/import` | Replace the entire configuration from an export file (`{ file, passphrase }`, 25 MB body limit). Runs in one transaction; re-encrypts secrets with the local `ENCRYPTION_KEY`; preserves schema-migration bookkeeping; drops columns unknown to the local schema; rejects files from a newer export version. Restarts calendar sync afterwards. |
 
 See [Features → Configuration backup](features.md#configuration-backup-export--import)
@@ -220,9 +227,9 @@ for what's included/excluded and the file format rationale.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/admin-pin/exists` | Whether a PIN is set. |
-| POST | `/api/admin-pin/set` | Set/replace the PIN. |
-| DELETE | `/api/admin-pin` | Remove the PIN. |
-| POST | `/api/admin-pin/verify` | Verify an entered PIN. |
+| POST | `/api/admin-pin/set` | Set/replace the PIN (replacing needs `X-Admin-Token`). Returns `token`. |
+| DELETE | `/api/admin-pin` | Remove the PIN (needs `X-Admin-Token`). |
+| POST | `/api/admin-pin/verify` | Verify an entered PIN. Returns `{ valid, token }`; `429` after 5 wrong tries. |
 
 > This table is generated from the route registrations in
 > [`server/index.js`](../../server/index.js). When you add or change a route,

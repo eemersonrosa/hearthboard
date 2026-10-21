@@ -113,7 +113,8 @@ Use the built-in configuration backup (Admin Panel → **Backup**):
 3. Open its Admin Panel → Backup → **Import Configuration**, pick the file,
    enter the passphrase, and confirm. The import replaces the fresh instance's
    configuration wholesale: settings, devices, tabs, widget layouts, users,
-   chores, calendar/photo sources, and the admin PIN.
+   chores, and calendar/photo sources. The admin PIN is not carried over —
+   set it again on the new host.
 
 Stored credentials are re-encrypted with the new host's `ENCRYPTION_KEY`
 automatically — the keys don't need to match. Not covered by the export:
